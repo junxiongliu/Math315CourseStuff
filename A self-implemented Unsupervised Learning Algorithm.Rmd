@@ -1,0 +1,122 @@
+---
+title: "A fun unsupervised learning algorithm"
+author: "Junxiong Liu"
+date: "April.28, 2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r packageCheck, include=FALSE}
+mypacks <- c("dplyr","ggplot2","tidyr","readr","stringr","lubridate","statnet","circlize")  # what packages are needed?
+packs <- installed.packages()   # find installed package list
+install.me <- mypacks[!(mypacks %in% packs[,"Package"])]  #what needs to be installed?
+if (length(install.me) >= 1) install.packages(install.me, repos = "http://cran.us.r-project.org")   # install (if needed)
+lapply(mypacks, library, character.only=TRUE)  # load all packages
+```
+
+**This is about unsupervised learning and the sample was originally written for the take-home final exam of the course.** 
+
+### Problem
+This dataset has two variables `x` and `y`. There are clearly two clusters of "spiral pattern", and "distance-based" clustering algorithms (e.g. k-means) does not do well in sorting out the clusters. Here
+
+```{r}
+d <- read_csv("http://people.carleton.edu/~kstclair/data/p2data.csv")
+```
+
+#### (a) Scatter Plot
+```{r a}
+#scatter plot
+ggplot(d,aes(x=x,y=y)) + geom_point() + ggtitle("Scatterplot for y against x")
+```
+
+#### (b) Not-working k-means clustering
+```{r b}
+set.seed(66)
+km_out <- kmeans(d, centers=2, nstart=20)
+d2 <- d %>% mutate(`k-means cluster` = as.character(km_out$cluster))
+
+#plot
+ggplot(d2,aes(x=x,y=y)) + geom_point(aes(color=`k-means cluster`)) + 
+  ggtitle("Scatterplot for y against x with k-means clustering")
+```
+
+#### (c) Not-working hierarchical clustering
+```{r c}
+dist <- dist(d)
+hc <- hclust(dist)
+d3 <- d2 %>% 
+  mutate('hierarchical cluster' = as.character(cutree(hc, k=2))) %>%
+  gather(key=type,value='cluster assignment',`k-means cluster`,`hierarchical cluster`) #for plotting
+
+#plot
+ggplot(d3,aes(x=x,y=y)) + geom_point(aes(color=`cluster assignment`)) + facet_wrap(~type) +
+  ggtitle("Scatterplot for y against x for two clustering methods")
+```
+
+#### (d) A much better algorithm based with "greedy" approach
+```{r d}
+#find the closet point in the df that has not been assigned a cluster with respect to a single point
+#input: input point (x,y),a df with columns x, y and 'my_cluster'
+#output: the row number of the closest point in the data frame
+findClosest <- function(input_x,input_y,df){
+  point <- data.frame(x=input_x,y=input_y)
+  dist <- dist(rbind(point,df[c("x","y")]))[1:nrow(df)] #need distances for the input point (so need 1st column)
+  dist_sorted <- sort(dist)
+  if (input_x %in% df$x & input_y %in% df$y){#the point is in the df
+    #find the closest unassigned point for this point
+    for (i in 1:length(dist_sorted)){
+      index <- which(dist == dist_sorted[i])
+      if (df$my_cluster[index] == 0){#no cluster assigned
+        return(index) #return the row number
+      }
+    }
+  }else{#the point not in the df, which is initial condition. Find the closet point as starting point!
+    return (which.min(dist)) # return the row number
+  }
+}
+
+#assigning clusters to a data frame with findClosest (need to use the same df as findClosest)
+#input: number of desired clusters k, points for assinging in the form {x1,x2,xk},{y1,y2,yk}
+#output: df with clusters assigned
+assignCluster <- function (input_x_set,input_y_set,num_cluster,df){
+  #vectors for future use
+  rows <- vector(mode="numeric", length=0)
+  x_set <- vector(mode="numeric", length=0)
+  y_set <- vector(mode="numeric", length=0)
+  if (min(as.numeric(df$my_cluster)) == 0){ #if there are still points unassigned cluster
+    for (i in 1:num_cluster){
+      rows[i] <- findClosest(input_x_set[i],input_y_set[i],df)
+      df$my_cluster[rows[i]] <- i #assigning clusters
+      x_set[i] <- df$x[rows[i]]
+      y_set[i] <- df$y[rows[i]]
+    }
+    if (min(as.numeric(df$my_cluster)) != 0){ #all assigned
+      return (df)
+    }
+    assignCluster(x_set,y_set,num_cluster,df) #continue assigning cluster based on the new point
+  }
+}
+
+#initialize, observing that the starting points of two spirals are around (0.3,0) and (-0.3,0)
+d4 <- cbind(d,my_cluster=0) #set my_cluster=0 for all
+num_cluster <- 2
+init_x_set <- c(-0.3,0.3)
+init_y_set <- c(0,0)
+
+#assinging cluster and plot
+d4 <- assignCluster(init_x_set,init_y_set,num_cluster,d4)
+summary(as.factor(d4$my_cluster))
+d4 %>% 
+  mutate(my_cluster = factor(my_cluster)) %>%
+    ggplot(aes(x=x,y=y)) + geom_point(aes(color=my_cluster)) + 
+    ggtitle("Scatterplot for y against x using my clustering method (yay!)")
+```
+
+*Explanation:* we observe that most points in one spiral tend to be very close to at least one point in the same spiral, and they are relatively far away from most points in the other spiral. My algorithm is inspired by this observation and the greedy algorithm idea. The general steps for this example are:
+
+(1). Input two estimated starting points for each spiral (by human observation) and find two closest actual points *k1* and *j1* in the dataframe as the actual starting points for each spiral, respectively. Assign *k1* to cluster 1 and *j1* to cluster 2 
+
+(2). Find the closest point with no cluster assigned near *k1* and assign it to cluster 1 (say this point *k2*). Then find the closest point with no cluster assigned near *j1* and assign it to cluster 2 (say this point *j2*). The next step of finding the closest points will be based on this newly assigned pair *(k2,j2)*.
+
+(3). Repeat step (2) again and again, until we have *(kn,jn)* where *2n=300* and all points are now assigned to either cluster 1 and cluster 2 (in this case 150 points for each cluster). Our algorithm is complete.

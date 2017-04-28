@@ -1,0 +1,153 @@
+---
+title: "Election Data Classification"
+author: "Junxiong Liu"
+date: 'April.28, 2017'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse=TRUE, prompt=TRUE, eval=TRUE, message=F, 
+                      include=T, comment=NULL, cache=TRUE)
+```
+
+```{r packageCheck, include=FALSE}
+# run the update below in the console if you get an error with str_view
+# update.packages(oldPkgs = "stringr", ask=FALSE, repos = "http://cran.us.r-project.org")
+mypacks <- c("ggplot2","dplyr","readr","tidyr", "knitr", "randomForest","boot","stringr", "class")  # what packages are needed?
+packs <- installed.packages()   # find installed package list
+install.me <- mypacks[!(mypacks %in% packs[,"Package"])]  #what needs to be installed?
+if (length(install.me) >= 1) install.packages(install.me, repos = "http://cran.us.r-project.org")   # install (if needed)
+lapply(mypacks, library, character.only=TRUE)  # load all packages
+```
+
+**This is about supervised learning and this file contains the experiment of some classification algorithms on 2016 Election data**
+
+## Data
+```{r, eval=TRUE}
+train <- read_csv("https://people.carleton.edu/~kstclair/data/train.csv")
+```
+
+The first 51 variables in this data frame contain county-level demographic and economic data. The table at the end of this doc shows the dictionary that describes these variables. 
+
+```{r}
+key <- read.csv("https://people.carleton.edu/~kstclair/data/county_facts_dictionary.csv")
+```
+
+### Data Dictionary
+
+```{r}
+kable(key)
+```
+
+### (a) Clean the data
+
+```{r}
+which(is.na(train))    # no NA values
+
+train2 <- train %>%
+  mutate(winner = as.factor(ifelse(winner == "Dem", 1, 0)))    # 1 if elected Democrat
+```
+
+### (b) Create the test set
+
+```{r}
+set.seed(1)
+N <- nrow(train2)
+train_index <- sample(1:N, size = round(0.8*N))
+train_df <- train2[train_index, ]
+test_df <- train2[-train_index, ]
+```
+
+### (c) Random forest model
+
+```{r}
+# fit random forest model with all variables
+rf1 <- randomForest(winner ~ ., data = train_df, ntree = 5000, mtry = 7)
+
+varImpPlot(rf1)
+
+var_imp <- data.frame(variable = rownames(rf1$importance), 
+                      MeanDecreaseGini = as.vector(rf1$importance))
+var_imp %>% 
+  arrange(desc(MeanDecreaseGini))
+
+# add predictions to test data frame
+test_pred <- test_df %>%
+  transmute(winner = winner,
+            prob_rf = predict(rf1, newdata = test_df, type = "prob")[,2],
+            pred_rf = predict(rf1, newdata = test_df, type = "class"))
+```
+
+### (d) K-nearest neighbors model
+
+```{r}
+train_df2 <- data.frame(scale(train_df[ ,-52]))
+test_df2 <- data.frame(scale(test_df[ ,-52]))
+
+#funciton to find optimal k
+  knn_fun <- function(k)
+{
+  knn1 <- knn(train = train_df2, test = test_df2, cl = train_df$winner, k=k)
+  test_pred2 <- test_pred %>%
+                  mutate(pred_knn = knn1)
+  # accuracy for knn 
+  conf_mat <- with(test_pred2, table(winner, pred_knn))
+  return(accuracy = sum(diag(prop.table(conf_mat)))) 
+}
+
+#compute
+set.seed(5)
+accuracies <- sapply(1:30, knn_fun)
+ 
+#plot
+ggplot(data_frame(accuracies, k=1:30), aes(x=k, y=accuracies)) + geom_point() + geom_line()
+#k=9 has the highest accuracies
+
+# fit knn model
+knn1 <- knn(train = train_df2, test = test_df2, cl = train_df$winner, k = 9)
+
+# add predictions to test data frame
+test_pred <- test_pred %>%
+  mutate(pred_knn = knn1)
+```
+
+### (e) Logistic regression model
+
+```{r}
+# fit logistic model with all variables
+elections.glm <- glm(winner ~ ., data = train2, family = "binomial")
+summary(elections.glm)
+
+# fit logistic model with only significant variables
+sig_vars <- str_c(c("PST045214", "POP715213", "EDU635213", "HSG096213", "HSG495213", "INC910213", 
+                    "BZA010213", "SBO315207", "SBO415207"), collapse = "+")
+myForm <- as.formula(str_c("winner ~ ", sig_vars))
+elections.glm2 <- glm(myForm, data = train2, family = "binomial")
+
+# cross validation on logistic model
+cost <- function(y, pi) mean(abs(y - pi) > 0.5)
+cv.glm1 <- cv.glm(train2, elections.glm, cost, K=5)
+cv.glm2 <- cv.glm(train2, elections.glm2, cost, K=5)
+1 - cv.glm1$delta[1]    # accuracy
+1 - cv.glm2$delta[1]
+
+# add predictions to test data frame
+test_pred <- test_pred %>%
+  mutate(prob_glm = predict(elections.glm, type = "response", newdata = test_df),
+         pred_glm = ifelse(prob_glm > 0.5, 1, 0))
+```
+
+### (f) Accuracy rates
+
+```{r}
+# accuracy for random forest
+(conf_mat1 <- with(test_pred, table(winner, pred_rf)))
+sum(diag(prop.table(conf_mat1)))
+
+# accuracy for knn 
+(conf_mat2 <- with(test_pred, table(winner, pred_knn)))
+sum(diag(prop.table(conf_mat2)))
+
+# accuracy for logistic 
+1 - cv.glm1$delta[1]
+```
