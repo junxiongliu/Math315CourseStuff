@@ -1,1 +1,1 @@
-# Math315CourseStuff
+###### This is a repository to store some projects and fun stuff I did in Math 315: Data Science course at Carleton College with Professor Katie St. Clair. The link for the course is http://people.carleton.edu/~kstclair/DataScience.html
