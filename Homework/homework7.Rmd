@@ -1,0 +1,277 @@
+---
+title: "Math 315 F16: Homework 7"
+author: "Junxiong Liu" 
+date: "Due by midnight, Saturday, Nov. 5"
+output: 
+  html_document:
+    fig_height: 8
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse=TRUE, prompt=TRUE,comment=NULL,message=FALSE, include=TRUE)
+```
+```{r packageCheck, include=FALSE}
+# run the update below in the console if you get an error with str_view
+# update.packages(oldPkgs = "stringr", ask=FALSE, repos = "http://cran.us.r-project.org")
+mypacks <- c("ggplot2","dplyr","tidyr","stringr","readr","ISLR","nasaweather", "randomForest","class")  # what packages are needed?
+packs <- installed.packages()   # find installed package list
+install.me <- mypacks[!(mypacks %in% packs[,"Package"])]  #what needs to be installed?
+if (length(install.me) >= 1) install.packages(install.me, repos = "http://cran.us.r-project.org")   # install (if needed)
+lapply(mypacks, library, character.only=TRUE)  # load all packages
+```
+
+## No more problems to add!
+
+### Problem 1
+The `ISLR` package has a data set called `Caravan` that contains 5822 customer records. Our goal is the predict whether an individual will `Purchase` a caravan insurance policy. The first 43 variables are sociodemographic variables and the remaining variables describe insurance product ownership. The socioeconmic variables are aggregated for the zip code of the individual customer, so all customers living in the same zip code will have the same sociodemographic values. See the help file and web page referenced in the data description for more details on these variables. (Note: this must be a British data set, a caravan in Britian is what Americans call an R.V. or camper.)
+
+We will use the first 1000 values as the test set for this example and the remaining 4822 cases as the training set. 
+
+```{r}
+dim(Caravan)
+names(Caravan)
+test_index <- 1:1000
+```
+
+a. What proportion of people in this data purchased caravan insurance (`Purchase`)?
+
+**answer:** 
+
+6.0% of people in this data purchased caravan insurance.
+```{r 1a}
+prop.table(table(Caravan$Purchase))
+```
+
+b. Fit a random forest model to the training data that uses the first 85 variables (sociodemographic + other insurance policy info) to predict a caravan policy purchase (`Purchase`). (Use default settings.) Give the OOB error for this training set fit and determine the top four "important" variables for this model. Go to the website referenced in the help file for a description of these variables to understand what they measure.
+
+**answer:**
+
+The OOB Error rate is 6.8%. The four most important variables are *MOSTYPE* (Customer Subtype), *PBRAND* (Contribution fire policies), *PPERSAUT* (Contribution car policies), and *APERSAUT* (Number of car policies).
+```{r 1b}
+#record what is going to be in the model
+Caravan_training <- Caravan[-test_index,]
+xvars <- str_c(names(Caravan_training)[1:85], collapse="+")
+myform <- as.formula(str_c("Purchase ~ ", xvars))
+
+#modeling
+set.seed(5)
+Caravan_rforest <- randomForest(myform, data=Caravan_training)
+Caravan_rforest #error rate is 6.8%
+
+#find the top four important variables
+imp <- data.frame(importance(Caravan_rforest)) 
+imp %>% 
+  mutate(var_name = row.names(imp))%>% 
+  arrange(desc(MeanDecreaseGini)) %>% head(4)
+```
+
+c. Use your model in b to predict policy purchase for the test set. What is your test error rate for your random forest model? What is the *precision* of your model? Recall that precision is the proportion of predicted successes (caravan policy purchases) that are correct. 
+
+**answer:**
+
+The test error rate for the random forest model is 7.1%, and the precision of the model is 20%.
+```{r 1c}
+Caravan_testing <- Caravan[test_index,]
+Caravan_testing <- Caravan_testing %>% mutate(pred_forest = predict(Caravan_rforest, newdata=Caravan_testing, type="class"))
+conf.mat <- table(Caravan_testing$Purchase, Caravan_testing$pred_forest)
+conf.mat
+1 - sum(diag(prop.table(conf.mat))) #error rate
+prop.table(conf.mat,2)[2,2] #precision
+```
+
+d. The overall rate of policy purchase is low (your answer to part a), and this proportion from part a would be our *expected* precision if we were just randomly guessing who would purchase a caravan policy. How much better is the random forest model's precision compared to just randomly guessing? Suppose an insurance agent used your model to predict who might purchase a caravan policy, then focused her selling efforts on these customers (e.g. so she only contacted the $\hat{x}_1$ peole that you predicted would buy the policy). Why would she be more concerned with your rate of precision rather than your overall accuracy rate?
+
+**answer:**
+
+The rate in part a is 6.0%, and the precision for random forest is 20%, which improves the precision by about three times. She would be more concerned with the rate of precision than overall accuracy rate because she only contacted those we predict would buy the policy (which is exactly explained by precision). The overall accuracy rate, on the other hand, contains information "correctly predicting those who are not going to buy the policy" as well as the information "correctly predicint those who are going to buy the policy", which does not meet exacly what the insurance agents want.
+
+### Problem 2
+Refer back to the caravan data in problem 1
+
+a. Compute the standard deviations for the 85 predictors variables (everything except `Purchase`). What are the min and max predictor standard devations?
+
+**Answer:**
+
+The variable *MOSTYPE* (Customer Subtype) has the highest standard deviation of 12.85, and the variable *ABYSTAND* (Number of social security insurance policies) has the smallest standard deviation of 0.12.
+```{r 2a}
+sds <- apply(Caravan[,1:85], 2, sd)
+head(sds)
+hist(sds)
+tail(sds)
+```
+
+b. Use the k-nn method to predict policy purchases for the test set of data using k=3 neighbors. What is the error rate and precision rate for the test set? (see 1c for precision review.)
+
+**Answer:**
+
+The error rate for the test set is 7.6%, and the precision rate is 0.
+```{r 2b}
+#k-nn method
+Caravan_knn_testing <- Caravan %>% slice(test_index) %>% select(-Purchase)
+Caravan_knn_training <- Caravan %>% slice(-test_index) %>% select(-Purchase)
+Caravan_knn1 <- knn(Caravan_knn_training, Caravan_knn_testing, cl= Caravan$Purchase[-test_index], k=3)
+
+#confusion matrix
+conf.mat_knn <- table(Caravan$Purchase[test_index], Caravan_knn1)
+conf.mat_knn
+1 - sum(diag(prop.table(conf.mat_knn))) #error rate
+prop.table(conf.mat_knn,2)[2,2] #precision
+```
+
+c. Repeat b but this time standardize all 85 predictors prior to dividing them into test and training sets. (e.g. use `scale` on all 5822 cases then divide them into test and training sets.) Why does it make sense to use standardized versions of the predictors in the k-nn method?
+
+**Answer:**
+
+The error rate for the test set is 7.4%, and the precision rate now is 20%.
+
+It makes sense to use the standardized versions of the predictors in the k-nn method in this case because the standard deviations histogram in part (a) shows a wide range and there is a very big standard deviation around the higher end. In the k-nn method in general, since we are using the "close predictors" to predict the cases, such big variability may decrease precision, and standardizing is a good idea.
+```{r 2c}
+#slicing/scaling data
+sCaravan <- scale(Caravan %>% select(-Purchase))
+sCaravan_knn_testing <- data.frame(sCaravan) %>% slice(test_index)
+sCaravan_knn_training <- data.frame(sCaravan) %>% slice(-test_index)
+
+#modeling
+Caravan_knn2 <- knn(sCaravan_knn_training, sCaravan_knn_testing, cl= Caravan$Purchase[-test_index], k=3)
+
+#confusion matrix
+conf.mat_knn2 <- table(Caravan$Purchase[test_index], Caravan_knn2)
+conf.mat_knn2
+1 - sum(diag(prop.table(conf.mat_knn2))) #error rate
+prop.table(conf.mat_knn2,2)[2,2] #precision
+```
+
+d. The function `knn.cv(X,Y,k)` gives LOOCV predictions for each case in the entire dataset for any given value of k. For k's from 1 to 20, use this function on the entire standardized data set (X) to predict the responses (Y) for the dataset. Then compute the precision of this method for each value of k and plot the precision vs. k. Which value of k seems to maximize your precision in correctly predicting policy purchases? What is the minimum value of precision that this model yields for large values of k? Why does this value make sense? (Hint: Look at the day 21 activity solution that uses the `knn.cv` function.)   
+
+**Answer:**
+
+The value of k=8 and k=14 seems to maximize the precision (~0.30). The minimum value of precision that this model yields for large values of k is as small as 0. This makes sense because if too many "closest neighbors" are taken into consideration, the prediction will be "overly influenced" by points farther away from it. Specifically in this case, since we only have 6.0% of all buying the policy (from observation, 1(a)), and it becomes harder to correctly predict if we include too many "farther points", and then certainly the precision goes to 0.
+
+```{r 2d}
+#funciton
+knn.cv_fun <- function(k, vars, response)
+{
+  Caravan_knn.cv <- knn.cv(vars, cl= response, k=k)
+  conf.mat <- table(response, Caravan_knn.cv)
+return(precision = prop.table(conf.mat,2)[2,2]) 
+}
+
+#compute
+set.seed(5)
+precisions.cv <- sapply(1:20, knn.cv_fun,vars=sCaravan, response=Caravan$Purchase)
+
+#plot
+ggplot(data_frame(precisions.cv, k=1:20), aes(x=k, y=precisions.cv)) + geom_point() + geom_line()
+```
+
+### Problem 3
+Review the colleges clustering example from day 23. Use this data to answer the following questions. Filter the data to only include schools in MN, MA and CA like was done in the activity.
+
+a. Do a hierarchical clustering using the standardized versions of variables `SATM`, `Tuition`, `NumFaculty` and `GradRate`. Show the basic dedrogram (non-colored) for this clustering. How many clusters will be formed if we cut the tree at a height of 4? **Note:** increase the figure height in your markdown document so you can see the tree better. 
+
+**Answer:**
+
+The dedrogram is shown below. There are five clusters if we cut the tree at a height of 4.
+
+```{r 3a}
+colleges <- read_csv("https://people.carleton.edu/~kstclair/data/Colleges.csv")
+colleges3 <- colleges %>% filter(State %in% c("MN","MA","CA")) 
+colleges3 <- colleges3 %>% 
+  mutate(scale_SATM = scale(SATM),scale_tuition = scale(Tuition),scale_numF = scale(NumFaculty),scale_grate = scale(GradRate))
+
+d <- dist(colleges3[,c("scale_SATM","scale_tuition","scale_numF","scale_grate")])
+hc <- hclust(d)
+
+#dedrogram
+plot(hc, labels=colleges3$College)
+
+#cutree at height of 4
+tree_vec <- cutree(hc, h=4)
+length(unique(tree_vec))
+
+#add back to colleges3
+colleges3 <- colleges3 %>% 
+  mutate(cluster1 = as.character(tree_vec))
+```
+
+b. Which school is most dissimilar from other schools with respect to these variables? What school is least dissimilar (i.e most similar!) to Scripps College with respect to these variables? Explain your answers.
+
+**Answer:**
+
+The most dissimilar from other schools with respect to these variables is the University of Minnesota-Twin Cities, because it is the only school occupying cluster 5. The school most similar to Scripps College is Pitzer College because they share the same node in the bottom leaf.
+
+```{r 3b}
+#most dissimilar
+colleges3 %>% count(cluster1)
+colleges3 %>% filter(cluster1 == "5")
+```
+
+c. Cut the tree to produce 5 clusters. Then produce a colored dendrogram that uses color to distinguish between clusters. How many schools are in each cluster? 
+
+**Answer:**
+
+```{r 3c}
+library("sparcl")
+tree_vec2 <- cutree(hc, k=5)
+
+colleges3 <- colleges3 %>%
+  mutate(cluster2 = as.character(tree_vec2))
+
+#colored dendrogram
+ColorDendrogram(hc, y=colleges3$cluster2, labels=colleges3$College, branchlength = 1.6)
+```
+
+d. Use EDA of the sort used in the day 23 activity to (generally) describe the schools in each cluster with respect to the variables we used to form the clusters. 
+
+**Answer:**
+
+Here is a plot for a set of general denstiy graphs for all the clusters. Cluster 1 contains schools with high graduation rate, small number of faculty, good SATM scores, and high tuition. Cluster 2 contains schools with small number of faculty, relatively low SATM scores and relatively high tuition. Cluster 3 contains schools with relatively low graduation rate, relatively small number of faculty, relatively low SATM scores, and relatively low tuition. Cluster 4 contains schools with relatively high graduation rate and number of faculty, as well as high high SATM scores and high tuition. Cluster 5 contains a school with low graduation rate, very high number fo faculty, slightly above average SATM scores, and low tuition.
+```{r 3d}
+colleges3 %>% 
+  select(cluster2,scale_SATM,scale_tuition,scale_numF,scale_grate) %>%
+  gather(key=variable, value=value, scale_SATM:scale_grate) %>%
+  ggplot(aes(x=value, color=cluster2)) + geom_density() + facet_wrap(~variable, scales="free") 
+```
+
+e. Now do a k-means clustering using the standardized versions of variables `SATM`, `Tuition`, `NumFaculty` and `GradRate` with $K=5$ clusters. Add the cluster variable to your data frame and used this cluster ID to redraw your colored dendrogram from part c. Are (roughly) the same clusters of schools obtained? If no, describe some of the changes to the clusters obtained using k-means. 
+
+**Answer:**
+
+Not same clusters obtained: The most siginificant change is that cluster 2 of the hierarchical clustering is divided into two clusters (Cluster 1 and Cluster 4) in the k-means. Also, we notice that part of cluster 3 of the hierarchial clustering go into cluster 1 in the k-means.
+```{r 3e}
+#kmeans
+set.seed(5)
+km <- kmeans(colleges3[,c("scale_SATM","scale_tuition","scale_numF","scale_grate")], centers=5, nstart=20)
+
+#add the variable into the df
+colleges3 <- colleges3 %>%
+  mutate(cluster3_km = as.character(km$cluster))
+
+#colored dendrogram
+ColorDendrogram(hc, y=colleges3$cluster3_km, labels=colleges3$College, branchlength = 1.6)
+
+#same cluster of schools?
+ggplot(colleges3, aes(x=cluster3_km, fill=cluster2)) + geom_bar() + labs(x="K-means clusters")
+table(colleges3$cluster3_km,colleges3$cluster2)
+```
+
+f. Repeat your EDA for part d for the k-means clusters. After briefly describing the school characteristics in each k-means cluster, decide which clustering you judge as "best"! Explain your choice.
+
+**Answer:**
+
+Cluster 1 of k-means contains schools with relatively low graduation rate, very small number of faculty, relatively low SAT math scores and relatively high tuition. Cluster 2 contains schools with relatively low graduaiton rate, relatively small number of faculty, relatively low SATM scores, and very low tuition. Cluster 3 contains schools with relatively low graduation rate, relatively small number of faculty, average SATM scores. Cluster 4 contains schools with relatively high graduation rate, relatively small number of faculty, relatively low SATM scores, and relativley high tuition. Cluster 5 contains schools with high graduation rate, small number of facutly, high SATM scores, and high tuition.
+
+I think the k-means clustering is slightly better because the number of schools in each cluster is more close, and there are not many extreme clusters with very big/small number of schools in the k-means clustering.
+```{r 3f}
+#number of schools for each cluster for k-means
+colleges3 %>% count(cluster3_km)
+
+#for hc2
+colleges3 %>% count(cluster2)
+
+colleges3 %>% 
+  select(cluster3_km,scale_SATM,scale_tuition,scale_numF,scale_grate) %>%
+  gather(key=variable, value=value, scale_SATM:scale_grate) %>%
+  ggplot(aes(x=value, color=cluster3_km)) + geom_density() + facet_wrap(~variable, scales="free") 
+```
+

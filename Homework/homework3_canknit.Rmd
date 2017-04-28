@@ -1,0 +1,339 @@
+---
+title: "Math 315 F16: Homework 3"
+author: "Junxiong Liu" 
+date: "Due by midnight, Sunday Oct. 2"
+runtime: shiny
+output: 
+  html_document:
+    fig_height: 5
+    fig_width: 10
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse=TRUE, prompt=TRUE, eval=TRUE, message=F, include=T,comment=NULL, echo=TRUE)
+```
+
+Place your homework assignment .Rmd and html/pdf/word docs in the hand-in folder by the given deadline. Also let me know: 
+
+**Who did you work with:** I worked alone on this assignment
+
+```{r packages, include=FALSE}
+library(ggplot2)
+library(shiny)
+library(dplyr)
+```
+
+### Problem 1
+Revist Textbook exercise 3.1. 
+
+a. Create a shiny version of person's `height` (y) vs. father's height (x) that allows the user to color the points (or not) by `sex`. You can use a checkbox (or any other widget you want) to toggle between the graph with and without color coded points. 
+
+*answer:*
+
+####Graph a
+```{r Problem 1:Shiny for Exercise 3.1 graph a}
+library(mosaicData)
+head(Galton)
+
+inputPanel(
+  checkboxInput("color_or_not",label="Color by sex?",value = FALSE, width = NULL)
+)
+
+renderPlot({
+  if(input$color_or_not)
+  {
+    ggplot(Galton,aes(x=father,y=height,color=sex)) + geom_point() + 
+      xlab("Father's height") + ylab("Person's height") + ggtitle("Person's height against father's height conditioned on sex")
+  }else{
+    ggplot(Galton,aes(x=father,y=height)) + geom_point() + 
+      xlab("Father's height") + ylab("Person's height") + ggtitle("Person's height against father's height")
+    }
+})
+```
+
+b. Create a shiny scatterplot that allows the user to select x- and y-axis variables: `height`, `father` or `mother`.  
+
+####Graph b 
+```{r Problem 1:Shiny for Exercise 3.1 graph b}
+# make a vector with a names attribute (left hand side of =):
+mychoices <- c("Child's height"="height","Father's height"="father","Mother's height"="mother")
+
+inputPanel(
+  selectInput("x_axis", label="Select variable for x axis", 
+              choices=c("Child's height"="height","Father's height"="father","Mother's height"="mother"), selected="height"),
+  selectInput("y_axis", label="Select varialbe for y axis",
+              choices = c("Child's height"="height","Father's height"="father","Mother's height"="mother"), selected="height")
+)
+
+renderPlot({
+  x_name <- as.character(names(mychoices)[mychoices == input$x_axis])
+  y_name <- as.character(names(mychoices)[mychoices == input$y_axis])
+  ggplot(Galton) + geom_point(aes_string(x=input$x_axis,y=input$y_axis)) + 
+    labs(x=x_name,y=y_name) + ggtitle(paste("Scatterplot for ",y_name," against ",x_name,sep=""))
+})
+```
+
+c. Create a shiny version of person's height (y) vs. fathers height (x) that allows you to click on a point to see the data associated with the case (or cases) near the clicked region.
+
+####Graph c
+```{r Problem 1:Shiny for Exercise 3.1 graph c}
+g <- ggplot(Galton,aes(x=father,y=height)) + geom_point() + 
+  xlab("Father's height") + ylab("Person's height") + ggtitle ("Person's height against father's height")
+
+output$myplot_1c <- renderPlot({ g })
+
+output$click_info_1c <- renderPrint({
+   nearPoints(Galton, input$plot_click_1c)[,c("father","height")] #not sure how to change names here
+  })
+
+plotOutput("myplot_1c",height=500,width = 600,click="plot_click_1c")
+verbatimTextOutput("click_info_1c")
+```
+
+### Extra Credit
+Revist textbook exercises 3.10. Create a shiny graph that animates the path taken by one storm (pick your favorite) over time in 6 hour increments since it was first tracked. The `sliderInput` allows for animation. An extra point for allowing the user to select which storm to explore!
+
+*answer:*
+```{r Extra Credit:shiny for storm by path}
+library(nasaweather)
+#find the longest lasting storm
+head(storms %>% group_by(name) %>% summarise(num = n()) %>% arrange(desc(num)),1) #86*6=516. Let's have max=540 for the inputpanel
+
+#all storm names
+names <- storms %>% select(name) %>% distinct() %>% .$name #command coming from stackoverflow
+
+inputPanel(
+  #name widget
+  selectInput("name", label="Select the name of your favorite storm", 
+            choices = names, selected="Allison"),
+  
+  #time widget:
+  sliderInput("time", label = "Select the number of hours since your favorite storm starts",
+              min = 0, max = 540, value = 0, step = 6)
+)
+
+renderPlot({
+  #The current point according to user selection
+  current_point <- storms %>% filter(name==as.character(input$name)) %>% 
+    arrange(day,hour) %>% filter(row_number()==as.numeric(input$time)/6+1)
+  
+  #plot
+  storms %>% filter(name==as.character(input$name)) %>% arrange(day,hour) %>% 
+    ggplot() + geom_path(aes(x=long,y=lat))+ geom_point(data=current_point,aes(x=long,y=lat),size=5,color="red") +
+    xlab("Longitude") + ylab("Latitude") + ggtitle(paste("Path for your favorite storm ",as.character(input$name),sep = ""))
+})
+
+```
+
+### Problem 2
+Recreate the Tillie name distribution line graph from Wednesday, but use your own name  and (at least) one other name of your choosing instead. If you can't find your name in the data, you can use whatever name you like! 
+
+```{r}
+library(babynames)
+head(babynames)
+
+#Finding Junxiong
+babynames %>% filter(name=="Junxiong") %>% summarise(n=n()) #can't find this, not surprisingly
+
+#Let's do male David (and alternative spelling: Dave, Davis, Davi) line plot
+babynames %>% filter(name %in% c("David","Dave","Davis","Davi"),sex=="M") %>%
+  ggplot(aes(x=year)) + geom_line(aes(y=n, color=name)) +
+  xlab("Year") + ylab("Count") + ggtitle("Distribution of these four male 'David-like' names over years")
+
+#Let's do again female name Jenny (and alternative spelling: Jen, Jennifer, Jane) line plot
+babynames %>% filter(name %in% c("Jenny","Jen","Jennifer","Jane"),sex=="F") %>%
+  ggplot(aes(x=year)) + geom_line(aes(y=n, color=name)) +
+  xlab("Year") + ylab("Count") + ggtitle("Distribution of these four female 'Jenny-like' names over years")
+```
+
+### Problem 3
+Exercise 4.16. Use `dplyr` package. (Hint: you'll need to use na.rm=TRUE to compute the median.) 
+
+*answer:* 
+
+From the graph below, we observe that for Manhattan zip codes with at least 50 inspectations, the median score seems to increase as number of inspectations increase.
+
+```{r}
+library(mdsr)
+colnames(Violations)
+levels(as.factor(Violations$boro))
+
+temp <- Violations %>% na.omit() %>% #omit all rows with na
+  group_by(zipcode) %>% mutate(n_inspection=n()) %>% filter(boro == "MANHATTAN",n_inspection >= 50) %>% #find/filter
+  group_by(zipcode,n_inspection) %>% summarise (median_score = median(score)) 
+
+temp #showing what the data frame looks like with zip codes and median scores
+
+temp %>% #find the median score
+  ggplot(aes(x=n_inspection,y=median_score)) + geom_point() + geom_smooth(method="lm",se=FALSE) + #ggplot fitting line by lm
+  xlab("Number of inspections") + ylab("Median score") + ggtitle("Median score against number of inspections by given restrictions")
+```
+
+### Problem 4
+Exercise 4.3 but answer these questions instead of the book's questions: what plane (by `tailnum`) traveled the most times *from* NYC airports in 2013? Compute the number of trips each day for 2013, then plot these values vs. day of the year (1:365) and month. What daily trends do you see? What monthly trends to you see? (Note: 2013 started and ended on a Tuesday. Thank you google.)
+
+*answer:*
+
+A. The plane with tail number N725MQ traveled the most times from NYC airports in 2013.
+
+B. Generally for daily trends, we observe a slightly incresing trend of number of daily departures as the year proceeds. We also notice some extremely low values of departure on both ends, most likely due to extreme weathers in winter.
+
+C. For monthly trends, we observe that in winter (November, December, January, and especially February) the number of departures are relatively low, coinciding with our guess in B that weather might be an influence. Also, due to the extreme low number of departures in February (partially because it only has 28 days), we get a line of positive slope. Finally, we also observe that the months with higher number of departures (top 5) are all months with 31 days (March, May, July, August, October), which totally make sense.
+
+```{r}
+library(nycflights13)
+colnames(flights)
+
+#which plane traveled most times from NYC
+most_travel <- flights %>% filter(!is.na(tailnum)) %>%
+  group_by(tailnum) %>% #only need to group by tailnum, all flights in this dataset from nyc airports
+  mutate(total_num = n()) %>% arrange(desc(total_num)) %>% 
+  select(carrier,tailnum,total_num) %>% distinct(carrier,total_num) #select only last few columns for viewing
+head(most_travel,3)
+
+#Plot daily trends
+flights %>% group_by(month,day) %>%
+  summarise(daily_total = n()) %>% ungroup() %>% mutate(every_day = row_number()) %>%
+  ggplot(aes(x=every_day,y=daily_total)) + geom_point() + geom_smooth(method="lm",se=FALSE) +
+  xlab("Days in 2013") + ylab("Daily total") + 
+  ggtitle("Scatterplot for daily total departures in NYC airports against days in 2013")
+
+#Plot monthly trends
+flights %>% group_by(month) %>% summarise(monthly_total = n()) %>% select(month,monthly_total) %>%
+  ggplot(aes(x=month,y=monthly_total)) + geom_point() + geom_smooth(method="lm",se=FALSE) +
+  scale_x_continuous(breaks=c(1:12)) + xlab("Months in 2013") + ylab("Monthly total") + 
+  ggtitle("Scatterplot for monthly total departures in NYC airports against months in 2013")
+```
+
+### Problem 5
+Exercise 4.6 but answer these questions instead of the book's questions: On how many days was there precipitation in the NYC area in 2013? Compute the mean visibility for each NYC airport each day for 2013, then plot these values vs. day of the year (1:364) and month for each NYC origin airport. What daily trends do you see? What monthly trends to you see? Is weather at each airport fairly similar or are there any noticable differences?
+
+Note that the `weather` data is missing Dec. 31, so you only have 364 days! Keep in mind that for each year/month/day/hour, there should be 3 weather reports, one for each New York area airport. There may be missing values too, so you may need to use `na.rm=TRUE` to run some of your summarize commands. 
+
+*answer:*
+
+A. There were 139 days out of 364 days recorded that NYC area had precipitation.
+
+B. Overall, it seems that the very bad days of very low visibility happen more often during the first few days of the year in winter, so there is a generally upward trend of visibility as year proceeds. Breaking down by airports, it seems that JFK airport generally has slightly worse visibility than the other two, while LaGuardia airport seems to in general has best visibility among these three. Overall, the weather (in terms of visibility) is pretty similar in all three airports by this daily trend plot.
+
+C. From this plot of monthly trends, we can confirm all information we got from B. In addition, we should add that December actually has an even worse mean visibility than January, but since our fitting line is a linear model without quadratic terms, we omitted it in the last daily analysis. Therefore by both graphs, we should claim that in winter (especially December and January) the mean visibility is significantly lower than other months. In addition, we can also confirm that in general three airports are very similar in mean visibility, despite JFK airport is slightly lower than the other two.
+
+```{r}
+colnames(weather)
+
+#how many days there are precipitation in the NYC area?
+weather %>% group_by(month,day) %>% summarise(total_precip = sum(precip)) %>% #sum of precip for each day
+  filter(total_precip > 0) %>% #find the days with total precip > 0
+  ungroup() %>% summarise(n_day = n()) #find number of days
+
+#Plot daily trends for mean visibility in each NYC airport
+weather %>% group_by(month,day,origin) %>%
+  summarise(daily_mean = mean(visib, na.rm = TRUE)) %>% ungroup() %>% 
+  group_by(origin) %>% arrange(month,day) %>%  mutate(every_day = 1:364) %>%
+  ggplot(aes(x=every_day,y=daily_mean,color=origin)) + geom_point() + geom_smooth(method="lm",se=FALSE) +
+  xlab("Days in 2013") + ylab("Daily mean visibility") + 
+  ggtitle("Scatterplot for daily mean visibility in each NYC airport against days in 2013")
+
+#Plot monthly trends for mean visibility in each NYC airport
+weather %>% group_by(month,origin) %>%
+  summarise(monthly_mean = mean(visib, na.rm = TRUE)) %>%
+  ggplot(aes(x=month,y=monthly_mean,color=origin)) + geom_point() + geom_smooth(method="lm",se=FALSE) +
+  scale_x_continuous(breaks=c(1:12)) + xlab("Months in 2013") + ylab("Monthly mean visibility") + 
+  ggtitle("Scatterplot for monthly mean visibility in each NYC airport against months in 2013")
+```
+
+### Problem 6
+Exercise 4.4
+
+*answer:*
+
+A. The oldest plane flying out of NYC airports in 2013 is a plane manufactured in 1956 with tail number N381AA.
+
+B. Of all the 4044 planes flying out of NYC in 2013, 3252 planes are included in the planes table, and the remaining 792 planes, not shown in the planes table, are missing date of manufacture.
+
+C. The distribution is generally left skewed (left tail is longer).Thus, in the lower left end, there are some extremely low values, indicating the existence some extremely old planes. Most planes are relatively new and were made around 2000 (**each plane is only counted once**).  
+
+D. The density graphs conditioned on each month look pretty similar and they tell us that the distribution of manufacture year does not seem to change over months in 2013 (**each plane is counted multiple times because it seems unfair to just extract just January if the plane is flying out of NYC over the whole year**).
+
+```{r}
+colnames(flights)
+colnames(planes)
+head(planes)
+
+all_info <- left_join(flights,planes, by=c("tailnum"= "tailnum"))
+colnames(all_info)
+
+#oldest plane:
+all_info %>% select(tailnum,year.y) %>% arrange(year.y) %>% distinct()
+
+#number of planes flew from NYC included in planes table/missing date of manufacturer
+all_info %>% distinct(tailnum) %>% summarise(n=n()) #4044 distinct planes
+all_info %>% select(tailnum,year.y) %>% na.omit() %>% distinct(tailnum) %>% summarise(n=n()) #3252 planes shown in plane table
+4044-3252
+
+#Display the distribution for year of manufacture
+all_info %>% 
+  select(tailnum,year.y) %>% na.omit() %>% #the number of times a plane is counted is related to the times it flew out of NYC
+  distinct(tailnum, year.y) %>% #only need to count each plane one time
+  ggplot(aes(x=year.y)) + geom_histogram(aes(y=..density..),bins = 40) +
+  geom_density(color="blue",adjust=2,size=1.5) +
+  xlab("Year of manufacture") + ylab("Density") + ggtitle("Density Distribution of year of manufacture for planes flying in NYC")
+
+#Display the distribution for year of manufacture conditioning on month
+all_info %>% select(tailnum,year.y,month) %>% na.omit() %>%
+  ggplot(aes(x=year.y)) + geom_histogram(aes(y=..density..),bins = 30) + 
+  geom_density(color="red",adjust=2,size=1) + facet_wrap(~month) +
+  xlab("Year of manufacture") + ylab("Density") + 
+  ggtitle("Density Distribution of year of manufacture for planes flying in NYC conditioned on month")
+```
+
+### Problem 7
+Exercise 4.15. Use `dplyr` package and the `Lahman` package. The datasets you will need are `Batting` (to get only batters) and `Master` (to get birth month). These datasets are not a tibble. You can use `as.tbl()` to convert these regular data frames to tibbles if you like.
+
+*answer:* 
+
+**Note:** For **Graph 1** only considering birth month, we only count each player exactly once. For **Graph 2** facetting each year in 2000-2009, we count multiple times for the similar reason as Problem 6 part D.
+
+Overall from **Graph 1** below, it seems that there is a general trend for the 2000s decade that there is a decline of density of batted players from August to the July (so generally, num in August >= num in Sep >...>= num in June >= num in July). There are most number of players born in August, and fewest number born in July. Breaking down by each year of 2000 to 2009 in **Graph 2**, similar trends can be observed in most years. Thus, this does somehow support the notion of a relative age effect, where the "cut-off age" should be around August 1. 
+
+However, I would also argue that even the general downward trend does not seem to be very obvious, and it seems a bit judgemental to claim this without any further investigation. In addition, by the blue fitted density lines for **Graph 1** and plots in **Graph 2**, we can clearly observe an updward trend from January to April, which also undermines the validity of relative age effect. 
+
+(**Extra part not really needed, just keep for my own reference**) Finally, by **Graph 3**, we observe that the two relatively low density month -June and July, actually produces most effective players considering "hit", while the month with most numbers: August, actually produce the least effective players.
+
+```{r}
+library(Lahman)
+
+#change to tbl
+Batting_tbl <- as.tbl(Batting)
+Master_tbl <- as.tbl(Master)
+
+head(Batting_tbl)
+head(Master_tbl)
+
+# Select those batted in the decades of the 2000s and join two datasets
+temp <- Batting_tbl %>% filter(yearID >= 2000, yearID <2010, AB > 0) #I suppose at bats mean "batted" players
+batted_info <- left_join(temp,Master_tbl,by = c("playerID" = "playerID")) %>% 
+               select(playerID,yearID,birthYear,birthMonth, H)
+
+#Display the distribution of birth months for all who batted
+batted_info %>% distinct(playerID,birthMonth) %>% #Each player counted only once
+  ggplot(aes(x=birthMonth)) + geom_histogram(aes(y=..density..),bins = 23) +
+  geom_density(color="blue",adjust=2,size=1.5) + scale_x_continuous(breaks=c(1:12)) +
+  xlab("Birth Month") + ylab("Density") + 
+  ggtitle("Graph 1: Density Distribution of birth month for players who batted in 2000 decade")
+
+#Display the distribution of birth months for all who batted conditioned on years
+batted_info %>% 
+  ggplot(aes(x=birthMonth)) + geom_histogram(aes(y=..density..),bins = 23) +
+  geom_density(color="blue",adjust=2,size=1.5) + facet_wrap(~yearID) + scale_x_continuous(breaks=c(1:12)) +
+  xlab("Birth Month") + ylab("Density") + 
+  ggtitle("Graph 2: Density Distribution of birth month for players who batted in each year of 2000 decade (non-aggregating)")
+
+#________________________________________________________________________
+#Player's performance over birth month for all who batted
+batted_info %>% group_by(birthMonth) %>% mutate(median_H = as.integer(median(H,na.rm=TRUE))) %>%
+  ggplot(aes(x=birthMonth,y=median_H)) + geom_point(size=3,color="red") + geom_line(color="blue") +
+  scale_x_continuous(breaks=c(1:12)) + xlab("Birth month") + ylab("Median number of hits") +
+  ggtitle("Graph 3: Median number of hits against birth month for all batted players in the decade of 2000")
+```
+

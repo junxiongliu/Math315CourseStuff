@@ -1,0 +1,518 @@
+---
+title: "Math 315 F16: Homework 5"
+author: "Junxiong Liu" 
+date: "Due by midnight, Wed. Oct. 19 "
+runtime: shiny
+output: 
+  html_document:
+    fig_height: 5
+    fig_width: 10
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse=TRUE, prompt=TRUE,comment=NULL,message=FALSE, include=TRUE,warning=FALSE)
+```
+```{r packageCheck, include=FALSE}
+# run the update below in the console if you get an error with str_view
+# update.packages(oldPkgs = "stringr", ask=FALSE, repos = "http://cran.us.r-project.org")
+mypacks <- c("ggplot2","dplyr","tidyr","stringr","readr","tidytext","lubridate","shiny")  # what packages are needed?
+packs <- installed.packages()   # find installed package list
+install.me <- mypacks[!(mypacks %in% packs[,"Package"])]  #what needs to be installed?
+if (length(install.me) >= 1) install.packages(install.me, repos = "http://cran.us.r-project.org")   # install (if needed)
+lapply(mypacks, library, character.only=TRUE)  # load all packages
+```
+
+
+### Problem 1
+Consider the data clean up  described in the `TrumpTweets_DataCleanup.Rmd`. 
+
+a. To count "real" words, I filtered out stop words and "numbers" using the following filter to create the `trumpWords2` data frame:
+```
+filter(!(word %in% stop_words$word), str_detect(word,"[a-z]"))
+```
+This filter does not omit "words" like `2pm` that have numbers and letters, it just requires there to be (at least one) lowercase letter in the word. 
+```{r}
+library(stringr)
+str_detect("2pm", "[a-z]")
+str_detect("2PM", "[a-z]")
+```
+
+```{r,eval=FALSE,include=FALSE}
+#_______________________________
+#For personal reference, not working
+str_detect("3SDf",".[a-zA-Z]")
+str_detect("@2pm", "![//d:]")
+str_detect("@2pm", "[^#@]")
+str_view("#p2m", "[^#@]")
+
+#_______________________________
+#Working
+str_detect("@2pm", "^[#@]")|!str_detect("@2pm","[\\d]")
+str_detect("2st", "^[#@]")|!str_detect("2st","[\\d]")
+```
+Improve this filter so that it omits "words" like like 2pm or 2PM from the "real" word count. The filter should still keep words like twitter handles or hashtags that do contain numbers. 
+
+**answer:**
+
+```{r,eval=FALSE}
+filter(!(word %in% stop_words$word), str_detect(word, "^[#@]")|!str_detect(word,"[\\d]"))
+```
+
+Explanation: the first part `str_detect(word, "^[#@]")` keeps the words with hashtag and twitter handles. The second part `!str_detect(word,"[\\d]")` makes sure that no numbers are there (the second part will give False if number appears). Also, TRUE or FALSE gives TRUE, so we will have no problem to keep things like @2pm. 
+
+b. Create a graph that tracks the trend of tweets referencing Hillary Clinton over time in 2016. When do you start seeing a rise in Hillary tweets? 
+
+**answer:**
+
+We start seeing a considerable rise in Hilary tweets from May, and an even bigger rise in Hilary tweets starting from middle to late June.
+
+```{r,echo=FALSE}
+tweets<- read_csv("http://people.carleton.edu/~kstclair/data/TrumpTweetData.csv")
+
+#Extract the needed informaiton
+tweets2 <- tweets %>%
+  mutate(year = year(created), month = month(created), 
+         day = day(created), day_of_year = yday(created)) %>%
+  select(text,created,year,month,day,day_of_year)
+
+#for Hilary
+tweets_hilary <- tweets2 %>%
+  filter(str_detect(str_to_lower(text),"hillary|clinton"),year==2016) %>%
+  group_by(day_of_year) %>% mutate(daily_total = n()) %>%
+  select(month,day_of_year,daily_total) %>% distinct(month,daily_total)
+
+#create all time to count for days with 0 tweets
+all_time <- seq(as.Date("2016-01-01"), as.Date("2016-08-08"), by="days")
+temp <- data.frame(all_time)
+temp2 <- temp %>% 
+  mutate(month = month(all_time), day_of_year = yday(all_time)) %>%
+  filter(!day_of_year %in% tweets_hilary$day_of_year) %>%
+  mutate(daily_total = 0) %>% select(month,day_of_year,daily_total)
+
+#full df
+tweets_hilary_full <- 
+  bind_rows(tweets_hilary,temp2) %>% arrange(day_of_year) %>%
+  mutate(month = as.factor(month))
+  
+tweets_hilary_full%>%
+  ggplot(aes(x=day_of_year,y=daily_total,color=month)) + geom_point() + geom_line(size=1.1) +
+  scale_y_continuous(breaks=c(1:20))+
+  xlab("Day of the year in 2016") + ylab("Daily total tweets about Hillary Clinton") +
+  ggtitle("Trump's daily total tweet trensds about Hillary Clinton against days in 2016")
+```
+
+#### Extra credit
+Redo part b with a shiny graph that allows the user to specify the word they want to track over time in 2016.
+
+**answer:**
+
+```{r,echo=FALSE}
+inputPanel(
+  textInput("text", label = "Enter the word you want to track (case insensitive)", value = "Enter here...")
+)
+
+renderPlot({
+#for this word
+tweets_word <- tweets2 %>%
+  filter(str_detect(str_to_lower(text),str_to_lower(input$text)),year==2016) %>%
+  group_by(day_of_year) %>% mutate(daily_total = n()) %>%
+  select(month,day_of_year,daily_total) %>% distinct(month,daily_total)
+
+#create all time to count for days with 0 tweets
+all_time <- seq(as.Date("2016-01-01"), as.Date("2016-08-08"), by="days")
+temp <- data.frame(all_time)
+temp2 <- temp %>% 
+  mutate(month = month(all_time), day_of_year = yday(all_time)) %>%
+  filter(!day_of_year %in% tweets_word$day_of_year) %>%
+  mutate(daily_total = 0) %>% select(month,day_of_year,daily_total)
+
+#full df
+tweets_word_full <- 
+  bind_rows(tweets_word,temp2) %>% arrange(day_of_year) %>%
+  mutate(month = as.factor(month))
+  
+tweets_word_full%>%
+  ggplot(aes(x=day_of_year,y=daily_total,color=month)) + geom_point() + geom_line(size=1.1) +
+  xlab("Day of the year in 2016") + ylab(paste("Daily total tweets about your word")) +
+  ggtitle("Trump's daily total tweet trend about the word against days in 2016") 
+})
+```
+
+### Problem 2
+Consider the `babynames` data again.
+
+a. Plot the proportion of female babynames starting in "A" over time. Add the proportion of "A" names for males. Comment on any trends observed.
+
+**answer:**
+
+We observe that in almost all years there is a higher proportion of female babys has name starting in "A". Both trends for the proportions of male and female name starting in "A" decreased first from 1880 to around 1955, and then generally increased again from 1955 to now.  
+
+```{r, echo=FALSE}
+library(babynames)
+
+#for females
+A_fnames_prop <- 
+  babynames %>% filter(sex=="F") %>%
+  group_by(year) %>% mutate(yearly_total = sum(n)) %>% 
+  ungroup() %>% filter(str_detect(name, "^[aA]")) %>%
+  select(year,sex,name,n,yearly_total) %>% group_by(year) %>%
+  mutate(yearly_total_a = sum(n),a_prop = yearly_total_a/yearly_total) %>%
+  distinct(a_prop,sex)
+
+#plot females
+ggplot(A_fnames_prop,aes(x=year,y=a_prop)) + geom_point() + geom_line() +
+  xlab("Year") + ylab("Proportion of female baby names starting in A") +
+  ggtitle("Trends for proportion of female baby names starting in A")
+
+#for males
+A_mnames_prop <- 
+  babynames %>% filter(sex=="M") %>%
+  group_by(year) %>% mutate(yearly_total = sum(n)) %>% 
+  ungroup() %>% filter(str_detect(name, "^[aA]")) %>%
+  select(year,sex,name,n,yearly_total) %>% group_by(year) %>%
+  mutate(yearly_total_a = sum(n),a_prop = yearly_total_a/yearly_total) %>%
+  distinct(a_prop,sex)
+
+#plot for both
+bind_rows(A_fnames_prop,A_mnames_prop) %>%
+  ggplot(aes(x=year,y=a_prop,color=sex)) + geom_point() + geom_line() +
+  xlab("Year") + ylab("Proportion of baby names starting in A") +
+  ggtitle("Trends for proportion of baby names starting in A conditioned on sex")
+```
+
+b. Has the average length of female babynames changed over time? male names? Create a graph showing these trends.
+
+**answer:**
+
+The average length of both female babynames and male babynames are generally increasing from 1880 to around 1990, and it starts to decrease in recent 25 years. Also, the average length for female names is longer than the average length for male names. 
+
+```{r,echo=FALSE}
+#for females
+A_fnames_len <- 
+  babynames %>% filter(sex=="F") %>%
+  mutate(length = str_length(name)) %>%
+  group_by(year) %>% mutate(mean_len = sum(length)/n()) %>% 
+  select(year,sex,mean_len) %>% distinct(mean_len,sex)
+
+#for males
+A_mnames_len <- 
+  babynames %>% filter(sex=="M") %>%
+  mutate(length = str_length(name)) %>%
+  group_by(year) %>% mutate(mean_len = sum(length)/n()) %>% 
+  select(year,sex,mean_len) %>% distinct(mean_len,sex)
+
+#plot for both
+bind_rows(A_fnames_len,A_mnames_len) %>%
+  ggplot(aes(x=year,y=mean_len,color=sex)) + geom_point() + geom_line() +
+  xlab("Year") + ylab("Mean length (number of characters) of baby names") +
+  ggtitle("Trends for mean length of baby names conditioned on sex")
+```
+
+### Problem 3
+Textbook exercise 5.4.
+
+**answer:**
+
+Here is the answer to Exercise 5.4 with a fix for the "dob" issue addressed in email.
+
+```{r,echo=FALSE}
+library(mosaic)
+#Let's check which columns of appdate, ceremonydate, and dob needs fix:
+
+Marriage %>% mutate(dob = mdy(dob)) %>% select(dob) %>% arrange(dob)
+#Obviously in the original format of dob, it is from 1924 to 1980, needs fix
+
+Marriage %>% mutate(appdate = mdy(appdate)) %>% select(appdate) %>% arrange(appdate)
+#appdate is fine
+
+Marriage %>% mutate(ceremonydate = mdy(ceremonydate)) %>% 
+  select(ceremonydate) %>% arrange(ceremonydate)
+#ceremony date is fine
+```
+
+```{r}
+#Change to date with fix;
+#we notice that all birthdates are in 1900s, so we can just apply the fix in the email for dob
+
+Marriage %>%
+  mutate(appdate = mdy(appdate), ceremonydate = mdy(ceremonydate),
+         dob = ymd(format(mdy(dob),"19%y-%m-%d"))) %>% #fixing the dob issue
+  select(appdate,ceremonydate,dob) %>%
+  glimpse()
+```
+
+### Problem 4
+Textbook exercise 5.3
+
+**answer:**
+
+```{r}
+library(Lahman)
+
+ team_fun <- function(team_name, data) {
+   team_count <- data %>%
+     mutate (teamID = as.character(teamID)) %>% 
+     filter(teamID == team_name) %>% distinct(teamID,yearID) %>%
+     group_by(teamID) %>% mutate(total_season = n()) %>% distinct(total_season) %>% ungroup() %>%
+     select(total_season) %>% as.numeric() #change to numeric vector
+ }
+ 
+bk_teams <- c("BR1","BR2","BR3","BR4","BRO","BRP","BRF")
+
+tlist <- sapply(bk_teams, FUN = team_fun, data = Teams)
+ 
+tlist
+```
+
+### Problem 5
+Fun with regular expressions. 
+
+a. Create a regular expression to find all words that start with three consonants. 
+
+**answer:**
+
+The expression is `"^[bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]{3}"`
+
+```{r}
+#The expression
+exp1 <- "^[bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]{3}"
+
+#some demos  
+str_detect("mki",exp1)
+str_detect("mkbi",exp1)
+str_detect("bstree",exp1)
+
+str_view("ant", exp1)
+str_view("rstudio",exp1)
+str_view("mkbi",exp1)
+```
+
+b. Describe in words what this expression will match: `"(.)(.)(.).*\\3\\2\\1"` and give an example of a match.
+
+**answer:** 
+
+The `"(.)(.)(.).*\\3\\2\\1"` is doing back reference. It matches the strings that contains the following pattern: **abcxcba**. 
+
+Specficially, this matches the string :
+
+- containing substrings with three characters "abc" and "cba", where "a","b" and "c" can be **any** character (using "abc" here is just a convenient way of representation). 
+
+- there can be 0 or more than 0 of any combination of characters between "abc" and "cba" (which is indicated by x in **abcxcba**).
+
+The following code produces an example of a match: 
+
+```{r}
+#An example of such match 
+#example thanks to http://www.fun-with-words.com/palin_explain.html
+str_detect("manyracecars","(.)(.)(.).*\\3\\2\\1")
+str_view("manyracecars","(.)(.)(.).*\\3\\2\\1") 
+```
+
+c. `words` in the `stringr` package is a vector of 980 words. What word, or words, in this vector has the highest number of vowels? What word has the highest proportion of vowels?
+
+**answer:**
+
+The eight words "appropriate", "associate", "available", "colleague", "encourage", "experience", "individual", "television" all have highest number of vowels (5 vowels). The word "a" has highest proportion of vowels, where the proportion is 1.
+
+```{r}
+words_df <- data.frame(words)
+words_df2 <- 
+  words_df %>% mutate(num_vowels = str_count(words,"[aeiouAEIOU]")) %>% 
+  mutate(prop_vowels = num_vowels/str_length(words))
+
+#highest number of vowels
+words_df2 %>% filter(num_vowels == max(num_vowels)) %>% print(width=Inf)
+
+#highest proportion of vowels
+words_df2 %>% filter(prop_vowels == max(prop_vowels)) %>% print(width=Inf)
+```
+
+d. `sentences` in the `stringr` package is a vector of 720 "Harvard sentences" used for standardized test of voice (see help file). What proportion of words in `sentences` are in the `words` vector? (Don't forget to deal with upper case letters and puncuation.)
+
+**answer:** 
+
+We find that about 58.4% of words (case-insensitive) in `sentences` are in the `words` vector.
+
+(note: we keep and count repetitive words in `sentences`, and we don't count punctuations.)
+
+```{r}
+seten <- data.frame(sentences)
+seten$sentences <- as.character(seten$sentences)
+
+#Find all words in the 720 sentences and create a data frame
+#This automatically excludes punctunations, which is nice because they shouldn't be counted as words
+seten_words<- seten %>%
+              unnest_tokens(word,sentences)
+
+#calculate the proportion
+seten_words %>% mutate(total_n = n()) %>% 
+  filter(str_to_lower(word) %in% str_to_lower(words_df$word)) %>% #all change to lower case vector
+  mutate(prop = n()/total_n) %>% select(prop) %>% distinct()
+```
+
+### Problem 6
+The data `TxTornadoes11-15.txt` is a comma delimited text file containing data about tornado touchdowns in Texas from 2011-15. Read the data in below using `read_csv` then answer the questions that follow.
+
+```{r,include=FALSE}
+tornadoes <- read_csv("http://people.carleton.edu/~kstclair/data/TxTornadoes11-15.txt", 
+                      col_types = cols(
+                        Fscale = col_factor(levels=c("EF0","EF1","EF2","EF3","EF4","EF5"))
+                      ))
+tornadoes <- tornadoes %>% filter(!duplicated(.))
+glimpse(tornadoes)
+```
+
+a. Verify that `BeginTime` is a character vector. The entries are written in `hhmm` format with no `:` between hours and minutes. To create an `hm` time object in `lubridate`, we will need to add the `:` between `hh` and `mm`. Use functions from `stringr` to add the `:` between hours and minutes, then combine these `hh:mm` times with `BeginData` to create a time object (using `lubridate`). 
+
+```{r}
+#it is indeed a character vector
+class(tornadoes$BeginTime)
+is.vector(tornadoes$BeginTime)
+
+tornadoes <- tornadoes %>% 
+  mutate(b_time = #adding :
+           str_c(str_extract(BeginTime,"^[\\d]{2}"),str_extract(BeginTime,"[\\d]{2}$"),sep=":"))%>%
+  mutate(time_obj = mdy_hm(str_c(BeginDate,b_time,sep=" "))) %>% #create time object
+  glimpse()
+```
+
+b. Create a graph that looks at the frequency of tornadoes by month. Which month do they occur most often? Then create another graph of this that accounts for year. Do they tend to occur in the same month(s) from year to year?
+
+**answer:**
+
+- As we only look at month, the tornadoes occur most oftenly in May.
+
+- As we also take year into account, we notice that tornadoes tend to occur during April or May from year to year.
+
+```{r,echo=FALSE}
+#accounting for month
+tornadoes %>% mutate(month = as.factor(month(time_obj))) %>% 
+  group_by(month) %>% summarise(n_total=n()) %>% ungroup() %>%
+  ggplot(aes(x=month,y=n_total)) + geom_bar(stat = "identity") +
+  xlab("Month") + ylab("Total number of tornadoes in that month") +
+  ggtitle("Number of tornadoes against month")
+
+#accounting for year and month
+tornadoes %>% mutate(month = as.factor(month(time_obj)),year = as.factor(year(time_obj))) %>% 
+  group_by(month,year) %>% summarise(n_total=n()) %>% ungroup() %>%
+  ggplot(aes(x=month,y=n_total)) + geom_bar(stat = "identity") + facet_wrap(~year) +
+  xlab("Month") + ylab("Total number of tornadoes in that month") +
+  ggtitle("Number of tornadoes against month conditioned on year")
+```
+
+c. What time of day to tornadoes tend to occur? Use a graphical display to help answer this question.
+
+**answer:**
+
+The tornadoes tend to occur between 12:00 and 20:00 during a day, with highest number of occurences between 17:00 and 18:59.
+
+```{r,echo=FALSE}
+tornadoes %>% mutate(hour = as.factor(hour(time_obj))) %>% 
+  group_by(hour) %>% summarise(n_total=n()) %>% ungroup() %>%
+  ggplot(aes(x=hour,y=n_total)) + geom_bar(stat = "identity") +
+  xlab("Hour") + ylab("Total number of tornadoes in that hour") +
+  ggtitle("Number of tornadoes against hours of the day")
+```
+
+
+d. The enhanced Fujita scale variable, `Fscale`, measures tornado severity:
+
+F Scale | Speed 
+--------|-------------------
+EF0     | 65-85 mph (light damage)
+EF1     | 86-110 mph (moderate damage)
+EF2     | 111-135 mph (considerable damage)
+EF3     | 136-165 mph (severe damage)
+EF4     | 166-200 mph (devastating damage)
+EF5     | > 200 mph (incredible damage)
+
+How strong were the tornadoes that hit Texas? Is there any relationship between strength of tornado and hour it hit?
+
+**answer:**
+
+- From graph 1 we find that for tornadoes hitting Texas, there are fewer tornadoes with higher strength (# of EF0 > # of EF1 > # of EF2 > # of EF3 > # of EF4), and there are no tornadoes with "EF5" damage. In addition, more than 50% of tornadoes hitting Texas are EF0
+
+- From graph 2, we are not able to confirm any obvious relationship between strength of tornado and hour it hit. However, we do notice that the most severe tornadoes (EF4) both hit between 18:00 and 19:00, and the relatively severe ones (EF3) mostly hit during our identified "peak time" between 12:00 and 20:00.
+
+```{r,echo=FALSE}
+#How strong are the tornadoes
+tornadoes %>% group_by(Fscale) %>% summarise (n_total = n()) %>%
+  ggplot(aes(x=Fscale,y=n_total)) + geom_bar(stat = "identity") +
+  xlab("Severity") + ylab("Count") +
+  ggtitle("Graph 1: Number of tornadoes against severity")
+
+#Hour hit and severity
+tornadoes %>% mutate(hour = as.factor(hour(time_obj))) %>%
+  ggplot(aes(x=hour,fill=Fscale)) + geom_bar(position="fill") +
+  xlab("Hour") + ylab("Proportion of tornado (by severity) for each hour") +
+  ggtitle("Graph 2: Strength of tornado vs hour it hit")
+```
+
+e. Add the beginning coordinates of each tornado to the map of Texas given below. Use color and size of points to denote the strength of the tornado. Note that if you use a factor variable for `size` you will get a warning. To avoid this, create a numeric version of `Fscale` by extracting the number from the scale. (Still use `Fscale` for color).
+
+**answer:**
+
+```{r,echo=FALSE}
+tornadoes %>% mutate(Fscale_num = as.numeric(str_extract(Fscale,"[\\d]"))) %>%
+  ggplot(aes(x=BeginLon,y=BeginLat)) +
+  borders(database="state",regions="Texas") +
+  coord_quickmap() +
+  geom_point(aes(size=Fscale_num,color=Fscale)) +
+  xlab("Beginning longtitude of a tornado") + ylab("Beginning latitude of a tornado") +
+  ggtitle("Position of beginning of tornadoes with severity")
+```
+
+f. If we want to plot the path of each storm we need to restructure the data to have two rows for each tornado so that you can have column of `TimeLocation` (Begin/End) and `Lat` and `Lon`. (Basically take the 1x4 values of BeginLat,BeginLon,EndLat,EndLon and make them into a 2x2 matrix of Lat,Long values for each level of `TimeLocation`.). You can then use the `geom_path` to connect the begin/end points of each tornado to approximate the actual path (which is likely not completely linear). 
+
+Fully explain what is being done in each step below (1-3), then use the last verison of `tornadoes_path` to plot the paths of the tornadoes. 
+
+**answer:**
+
+- Step 1 creates `tornadoes_path1`. The command basically makes the four variables BeginLat, BeginLon, EndLat, EndLon from `tornadoes` into long format. Specifically, the command creates a new location variable to store the BeginLat, BeginLon, EndLat, EndLon information, and the new coords variable corresponds to the value (coordinates) based on location.
+
+- Step 2 creates `tornadoes_path2`. The command is separating the Location variable in `tornadoes_path1` into two separate variables Time and loc to represent "start/end" and "longtitude/latitude" separately. It detects the place of separation by the `sep=-4` arguemnt at the end, which tells R to break down the string in the fourth last position, where all strings in Location variable has either Lon or Lat as ending.
+
+- Step 3 creates `tornadoes_path`. The command turns the "loc" and "coords" back into the wide format. Specifically, it eliminates the binary indicator column about location (lon/lat) and creates back two columns for Longtitude (Lon) and Latitude (Lat) with values about location information stored under.
+
+```{r,echo=FALSE}
+# step 1
+tornadoes_path1 <- gather(tornadoes, key=location, value=coords, BeginLat:EndLon)
+# step 2
+tornadoes_path2 <- separate(tornadoes_path1, location, into=c("Time","loc"),sep=-4)
+# step 3
+tornadoes_path <- spread(tornadoes_path2, key = loc, value=coords)
+```
+
+```{r,echo=FALSE}
+#first approach: using group in geom_path and paste
+
+#the set of variables (County,time_obj,BeginLocation,EndLocation,Fscale) can indeed uniquely identify a tornado
+tornadoes_path %>% 
+  group_by(County,time_obj,BeginLocation,EndLocation,Fscale) %>% summarise(n()) %>% 
+  nrow() == nrow(tornadoes)
+
+#plot
+g <- ggplot(tornadoes_path,aes(x=Lon,y=Lat)) +
+  borders(database="state",regions="Texas") +
+  coord_quickmap()+ 
+  geom_point(aes(color=Time),size=1.5) + 
+  geom_path(aes(group=paste(County,time_obj,BeginLocation,EndLocation,Fscale))) +
+  xlab("Longtitude of a tornado") + ylab("Latitude of a tornado") +
+  ggtitle("Path of each tornadoes (path in black line)")
+g
+
+#___________________________________________________________
+#second approach: arrange, slice and loop
+#___________________________________________________________
+#t_path_arranged <- 
+#  tornadoes_path %>% arrange(County,BeginLocation,time_obj,Time) #sort for plot
+
+# We only need the begin-end connection for each tornado; Since it is sorted, we only need pairs like 1-2; 3-4; 5-6.... The default geom_path() will simply connect everything! (knowing this from stack exchange)
+
+#for (i in seq(1,nrow(t_path_arranged),2)){
+#     c <- c(i,i+1)
+#     g = g+geom_path(data=t_path_arranged %>% slice(c))
+#}
+#___________________________________________________________
+
+```

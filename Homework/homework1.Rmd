@@ -1,0 +1,259 @@
+---
+title: "Math 315 F16: Homework 1"
+author: "Junxiong Liu" 
+date: "09/15/2016"
+output: html_document
+---
+
+```{r setup, include=FALSE,cache=FALSE}
+knitr::opts_chunk$set(collapse=TRUE, prompt=TRUE,comment=NULL,message=FALSE, include=TRUE)
+```
+
+Place your homework assignment .Rmd and html/pdf/word docs in the hand-in folder by the given deadline. Also let me know: 
+
+**Who did you work with:** I worked alone on this assignment.
+
+Note: *(s) only for my notation use to mark the relatively tricky one for me.
+
+### Problem 1
+Complete MDSR (your book) Appendix D exercises D.1, D.2, D.3, and D.4 without actually running the R chunk code given. Briefly explain why the code gives the output that you claim it will give. 
+
+*answer:* D.1 will produce five numbers 2 3 4 5 6 (which is 2:6) because we define x as 1:5 and add 1 to x itself. Also, since we don't attempt to hide any code, it will display all the code as we knit the RMarkdown.
+
+D.2  will only produce five numbers 2 3 4 5 6 (which is 2:6) without producing any code in the knitted output. We define x as 1:5 and add 1 to x itself, so we produce 2 3 4 5 6. We will not produce the code because it is suppressed by echo=FALSE command in every R chunk.
+
+D.3 will produce five numbers 1 2 3 4 5 (which is 1:5) without producing any code in the knitted output. We will not produce the code because it is suppressed by echo=FALSE command in every R chunk. Since the R chunk containing x <- x+1 has eval=FALSE on the top, x <- x+1 is not evaluated and thus x will preserve its original assignment (which is 1:5).
+
+D.4 will not produce anything if knitted because the only command trying to display (which is x in the last chunk) is under include=FALSE, which asks R not to display the out output in the chunk. However, in the R workspace, x will still be defined as 2:6, as both x <- 1:5 and x <- x+1 are evaluated.
+
+
+### Problem 2
+Consider the following R chunk and sentence with inline R code (which you can see in the .Rmd file):
+```{r}
+first <- "Foo"
+last <- "Fu"
+```
+The bunny is named `r first`.
+
+Consider the following four commands:
+
+a. `c(first,last)`
+b. `first last`
+c. `paste(first,last)`
+d. `paste0(first,last)`
+
+For (a)-(d), replace the r call to `first` in the sentence above with the given command. Explain the following:
+
+- Which command (a)-(d) gives you an error? Why? (you'll need to omit this inline R code to knit your document!)
+- Explain the differences in output produced by the other three commands.  
+
+*answer:*
+Command (a) gives: The bunny is named `r c(first,last)`.Command (c) gives: The bunny is named `r paste(first,last)`. Command (d) gives: The bunnys is named `r paste0(first,last)`.
+
+Command (b) gives me an error because merely putting two assigned values on the same line will not automatically combine in R, and will instead confuse R. Since command (b)  produces error if run in chunks (or console), it cannot run inline as well. On the other hand, all (a), (c) and (d) are good to run if put into R chunks (or console) when first and last are both defined (like in this case). Thus, (a), (c) and (d) are good to run inline this case.
+
+All (a), (c) and (d) combine the two strings "Foo" and "Fu". As for the difference, command (a) gives a combined output where "Foo" and "Fu" are separated by comma, while command (c) gives a combined output where "Foo" and "Fu" are separated by a white space. Command (d) gives a combined output where "Foo" and "Fu" are connected with no separation.
+
+### Problem 3 
+**criteria 2 code corrected to be `<=`**.Take a look at parts 5 and 6 of the file `day2_UPDATELoandEDAactivity_solution.Rmd`. In part 6 I changed my duration criteria used to predict default to 36 months instead of 24 months. In the solution, I then just copy/pasted the entire code chunk from part 5 into part 6 and made the change from 24 to 36 months. All the other code remained the same. I've provided the needed code chunks here so you don't have to copy/paste:
+```{r data, include=FALSE}
+loans <- read.csv("http://people.carleton.edu/~kstclair/data/CreditData.csv")
+```
+```{r part5, include=FALSE}
+pred.Default1 <- ifelse(loans$Duration.in.month > 24 & loans$Credit.amount > 10000,"predBad","predGood")
+table(pred.Default1)
+pred.Default <- ifelse(loans$Duration.in.month <= 24 & loans$Credit.amount < 2200,"predBad",pred.Default1)
+table(pred.Default1,pred.Default)
+table(loans$Good.Loan,pred.Default)
+props.all<- prop.table(table(loans$Good.Loan,pred.Default))
+props.all
+props.byrow<- prop.table(table(loans$Good.Loan,pred.Default),1)
+props.byrow
+```
+```{r part6, include=FALSE}
+pred.Default1 <- ifelse(loans$Duration.in.month > 36 & loans$Credit.amount > 10000,"predBad","predGood")
+table(pred.Default1)
+pred.Default <- ifelse(loans$Duration.in.month <= 36 & loans$Credit.amount < 2200,"predBad",pred.Default1)
+table(pred.Default1,pred.Default)
+table(loans$Good.Loan,pred.Default)
+props.all<- prop.table(table(loans$Good.Loan,pred.Default))
+props.all
+props.byrow<- prop.table(table(loans$Good.Loan,pred.Default),1)
+props.byrow
+```
+
+For problem 3, use the R chunk **naming option** to re-do the R Markdown for this problem so that you can avoid copy/pasting the part 5 commands needed for part 6. You shouldn't need to make major changes to the actual R code, but you may need to add a line or two of code in a new R chunk. (Note: You will need to see that your solution works by showing rather than supressing the output for each part.) 
+
+*answer:* Here is my attempt:
+
+The results for part 5 with cutoff of 24 months:
+```{r}
+month <- 24 #for Part 5
+```
+
+```{r prediction}
+pred.Default1 <- ifelse(loans$Duration.in.month > month & loans$Credit.amount > 10000,"predBad","predGood")
+table(pred.Default1)
+pred.Default <- ifelse(loans$Duration.in.month <= month & loans$Credit.amount < 2200,"predBad",pred.Default1)
+table(pred.Default1,pred.Default)
+table(loans$Good.Loan,pred.Default)
+props.all<- prop.table(table(loans$Good.Loan,pred.Default))
+props.all
+props.byrow<- prop.table(table(loans$Good.Loan,pred.Default),1)
+props.byrow
+```
+
+The results for part 6 with cutoff of 36 months:
+```{r}
+month <- 36 #for Part 6
+```
+
+```{r prediction}
+```
+
+### Problem 4
+Complete Appendix exercises B.1, B.2 and B.9. For exercise B.1, both describe what is returned and explain why that command produces the object. Try to answer these questions without using R, but you can use R to help or verify your answer. (e.g. This would be practice for the in-class portion of an exam where you can' use R!)
+
+*answer for B.1:* 
+
+(1) obj1*10 will give an object with entries 20 30 40 50 60 70 80 90 100 because this command is multipling each of 2 to 10 by 10.
+(2) obj1[2:4] will give an object with entries 3 4 5 because this command is querying the 2nd to 4th entry of object 1 (2 to 10).
+(3) obj1[-3] will give an object with entries 2 3 5 6 7 8 9 10 as this command will produce all integers in object 1 except the 3rd one (which is 4).*
+(4) obj1+obj2 will give an object with entries 4 8 6 10 8 12 10 14 12 and produce a warning message. It seems that it is summing up two objects "rotationally" by doing 2+2 3+5 4+2 5+5....**
+(5) obj1*obj3 will give an object with entries 2 0 4 0 6 0 8 0 10 and produce a warning message. It will treat "TRUE" and "FALSE" as integer 1 and 0, and then it follows a similar logic of "rotational multiplication" as in (4).
+(6) obj1+obj4 will give an object with entries 44 45 46 47 48 49 50 51 52 because this command is adding 42 to every integer in object 1 (from 2 to 10).
+(7) obj2+obj3 will give an object with entries 3 5 as we treat TRUE and FALSE as 1 and 0, and then the summation will follow the "rotational" logic as in (4) and (5).
+(8) sum(obj2) will give an object with single entry 7 because it is summing all elements in object 2 as 2+5=7.
+(9) sum(obj3) will give an object with single entry 1 as it treats TRUE as 1 and FALSE as 0, and 1+0=1.
+
+```{r Exercise Appendix B.1., eval=FALSE,include=FALSE}
+#This code is for examination
+obj1 <- 2:10
+obj2 <- c(2,5)
+obj3 <- c(TRUE,FALSE)
+obj4 <- 42
+
+class(obj1)
+class(obj2)
+class(obj3)
+class(obj4)
+
+obj1*10
+obj1[2:4]
+obj1[-3]
+obj1+obj2
+obj1*obj3
+obj1+obj4
+obj2+obj3
+sum(obj2)
+sum(obj3)
+```
+
+*answer for B.2:* 
+
+(1) data.frame(a,b,c) will return a data frame object with three columns with names "a","b" and "c". Correspondingly, there will be two rows (observations): "10 TRUE happy" and "15 FALSE sad".
+(2) cbind(a,b) will return a matrix object (2 by 2 matrix). The two columns will have names "a" and "b", and the two rows will be row 1 and row 2. The output will be 10 1 (row 1) and 15 0 (row 2).**
+(3) rbind(a,b) will return a matrix object (2 by 2 matrix). The two rows will have names "a" and "b", and the two columns will be column 1 and column 2. The output will be 10 15 (row a) and 1 0 (row b).
+(4) cbind(a,b,c) will return a matrix object with three columns and two rows. The three columns will have names "a", "b" and "c", and the two rows will be row 1 and row 2. The output will be "10" "TRUE"  "happy" (row 1), "15" "FALSE" "sad" (row 2).**
+(5) list(a,b,c)[[2]] will return a logical object with output TRUE FALSE.
+
+```{r Exercise Appendix B.2.}
+a <- c(10,15)
+b <- c(TRUE,FALSE)
+c <- c("happy","sad")
+
+data.frame(a,b,c)
+
+cbind(a,b)
+class(cbind(a,b))
+
+rbind(a,b)
+
+cbind(a,b,c)
+
+list(a,b,c)[[2]]
+class(list(a,b,c)[[2]])
+```
+
+*answer for B.9:*
+
+(1) result1 will generate an error (unexpected numeric constant) because sqrt is a function in R and there should have been parathenes containing the value that is going to be square rooted. So it should have been sqrt(10).
+(2) result2 will generate an error (invalid argument to unary operator) because we should use "<-" rather than "<--" to assign values in R.
+(3) 3result will generate an error (unexpected symbol) because we can't start the name of an object with number.
+(4) result4 will NOT generate any errors. But since a closing quotation mark for the string "Hello to you" is missing, it is not a complete statement and R will prompt you to finish the statement in the following lines.*
+(5) result5 will NOT generate any errors.
+
+```{r Exercise Appendix B.9.,eval=FALSE}
+#result1 <- sqrt 10
+#result2 <-- "Hello to you!"
+#3result <- "Hello to you"
+#result4 <- "Hello to you
+result5 <- date()
+```
+
+### Problem 5
+Consider the list used in Exercise B.3 (but don't answer the questions since the authors mistakenly give you the answers!). 
+```{r}
+mylist <- list(x1="sally", x2=42, x3=FALSE, x4=1:5)
+```
+Show how to produce the following output in **one command** (and make the command different from any shown in B.3 answers):
+
+a. `"sally"` (don't use the same command as shown in B.3)
+b. 42 (don't use the same command as shown in B.3)
+c. the 3rd and 4th entries in `x4`
+d. the length of `x4`
+
+*answer:*
+```{r Problem 5}
+#a.
+mylist[[1]]
+
+#b.
+mylist[["x2"]]
+
+#c.
+mylist$x4[3:4]
+mylist[[4]][3:4]
+mylist[["x4"]][3:4]
+
+#d.
+length(mylist[["x4"]])
+```
+
+### Problem 6
+Use the same list as problem 5. What type of objects are produced with the following commands:
+
+a. `mylist[1]`
+b. `mylist[[1]]`
+c. `unlist(mylist)`
+
+*answer:*
+
+(a) This produces a list object with name "x1" and a character "sally" in the list.
+(b) This produces a character object "sally".
+(c) This produces a character object with eight elements.**
+
+```{r Problem 6}
+class(mylist[1])
+class(mylist[[1]])
+class(unlist(mylist))
+```
+
+### Problem 7
+Use the same list as problem 5. Suppose you want to add a vector `x5` to `mylist`. You try two ways of doing this, shown below. Carefully describe and show the object that is produced by each of these commands and explain whether the command produces your desired list. 
+
+a. `list(mylist, x5=c(1,-7,3))`
+b. `mylist$x5 <- c(1,-7,3)`
+
+*answer:*
+
+(a) This approach will produce a new list object of 2 elements (objects). The first element is the original list "mylist", and the second element is a numeric vector x5 containing 1,-7,3. This command obviously does NOT produce my desired list because it treats the original "mylist" and the vector "x5" as parallel and it creates a new list of these two objects.
+(b) This approach will add the vector "x5" into the original "mylist" and produce our desired list. The new expanded "mylist" has 5 elements (objects). 4 of these 5 objects in the new "mylist" come from the original "mylist" and the remaining 1 object is the new vector "x5" as desired.
+
+```{r Problem 7}
+new1 <- list(mylist, x5=c(1,-7,3))
+str(new1)
+
+mylist$x5 <- c(1,-7,3)
+str(mylist)
+```

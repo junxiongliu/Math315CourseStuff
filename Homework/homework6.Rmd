@@ -1,0 +1,515 @@
+---
+title: "Math 315 F16: Homework 6"
+author: "Junxiong Liu" 
+date: "Due by midnight, Sunday, Oct. 30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse=TRUE, prompt=TRUE,comment=NULL,message=FALSE, include=TRUE)
+```
+```{r packageCheck, include=FALSE}
+# run the update below in the console if you get an error with str_view
+# update.packages(oldPkgs = "stringr", ask=FALSE, repos = "http://cran.us.r-project.org")
+mypacks <- c("ggplot2","dplyr","tidyr","stringr","readr","tidytext","lubridate", "rvest","nasaweather")  # what packages are needed?
+packs <- installed.packages()   # find installed package list
+install.me <- mypacks[!(mypacks %in% packs[,"Package"])]  #what needs to be installed?
+if (length(install.me) >= 1) install.packages(install.me, repos = "http://cran.us.r-project.org")   # install (if needed)
+lapply(mypacks, library, character.only=TRUE)  # load all packages
+```
+
+## No more problems will be added.
+
+### Problem 1
+Use `read_html` to scrape the data science website below that lists colleges and universities that offer "data science" type degrees. 
+
+```{r}
+url_ds <- "http://datascience.community/colleges"
+```
+
+a. After reading in the html page, create a data frame of the degree table. Then clean up the `Location` column so you only have categories: Campus, Online, Online/Campus. You should get 3 missing values in this column after cleanup. 
+
+**answer:**
+```{r 1a}
+#reading and creating df
+ds.html <- read_html(url_ds)
+tables.html <- html_nodes(ds.html,"table") #only 1 table
+table_ds <- html_table(tables.html[[1]])
+
+#cleanup the location variable
+summary(as.factor(table_ds$Location))
+
+#first filter out Online/Campus
+temp <- table_ds %>% filter(Location == "Online/Campus")
+
+#clean the rest
+temp2 <- anti_join(table_ds,temp) %>% mutate(Location = str_replace(Location,"/",""))
+
+#combine
+table_ds2 <- bind_rows(temp,temp2) %>% 
+  mutate(Location = ifelse(Location == "", NA, Location), Location =  as.factor(Location))
+
+summary(table_ds2$Location)
+```
+
+b. Create a table of proportions and a stacked bar graph that shows the distribution of `Degree` by `Location`. Compare the distributions of degree types across locations.
+
+**answer:**
+
+From both the proportion table and graph, and our knowledge that there are only 3 NAs for location, we can claim that the majority of Data Science degree programs is Master Degree program, regardless of options for location(s). The Bachelor programs for Data Science are almost all held exclusively on campus, and there are very few Doctoral programs in this field. The Certificate degree programs have almost identical proportions within the "Online" option and "Online/Campus" location, while it has smaller propotion in the "Campus" location. As for not available locations, 2 (66.7%) are certifactes, while 1 (33.3%) is a Master program.
+
+```{r 1b}
+#Proportion table
+prop.table(table(table_ds2$Location,table_ds2$Degree),1)
+
+#Graph
+table_ds2 %>%
+  ggplot(aes(x=Location,fill=Degree)) + geom_bar(position = "fill") +
+  ylab("Propotion") + ggtitle("Distributions of Data Science degree by location")
+```
+
+c. Clean up the `Department` column by creating a new version of department called `Dept_new`, with the more generic categories: 
+
+- Business/Management
+- Engineering/ComputerScience
+- Information/DataSci/Analytics
+- Statistics/Mathematics
+- Other
+
+Then repeat part (b), but use `Dept_new` instead of `Location. 
+
+Hint: I would use regular expressions of some sort to look for departments with "business" or "statistics" or "computer", etc, in their names then recode these into the broader categories using if-like statements. I also may have missed 
+
+**answer:**
+
+From both the proportion table and graph, we can again confirm that most of these Data Science programs are toward Master Degree. We also find that the Information/Data Science/Analytics Schools/Departments have the relatively high proportion of offering all other degrees except Master Degree. Finally, we find that the Business Schools/Departments offer almost no Doctoral degree.
+
+```{r 1c, echo = FALSE}
+bus_man <- "business|management"
+eng_cs <- "engineering|computer science|computerscience"
+info_ds_ana <- "information|data science|datascience|analytics|analytic"
+stat_math <- "statistics|mathematics|math|stats"
+
+table_ds2 <- 
+  table_ds2 %>%
+  mutate(Dept_new = ifelse(str_detect(str_to_lower(Department),bus_man), "Business",
+          ifelse(str_detect(str_to_lower(Department),eng_cs), "Engineering/ComputerScience", 
+          ifelse(str_detect(str_to_lower(Department),info_ds_ana),"Information/DataSci/Analytics", 
+          ifelse(str_detect(str_to_lower(Department),stat_math), "Statistics/Mathematics", "Other"))
+  )
+  )
+  ,Dept_new = as.factor(Dept_new))
+
+table_ds2$Dept_new <- factor(table_ds2$Dept_new, levels = c("Business","Engineering/ComputerScience","Information/DataSci/Analytics","Statistics/Mathematics","Other"))
+
+#Proportion table
+prop.table(table(table_ds2$Dept_new,table_ds2$Degree),1)
+
+#Graph
+table_ds2 %>%
+  ggplot(aes(x=Dept_new,fill=Degree)) + geom_bar(position = "fill") +
+  ylab("Propotion") + xlab("Departments") +
+  ggtitle("Distributions of Data Science degree by department") +
+  theme(axis.text.x = element_text(angle=60, hjust=1))
+
+```
+
+d. Separate the college/university name in the `College(Program)` column from the program names. Then determine how many colleges/universities in the US offer some form of a data science degree. How many outside of the US?
+
+**answer:**
+
+254 colleges in the U.S. offer some form of data science degree, while 105 colleges outside of the U.S. do not offer any form of data science degree.
+```{r}
+#separate
+table_ds2 <- table_ds2 %>%
+  mutate (College = str_extract(`College(Program)`,"(.*)[(]"),
+          College = str_replace(College,"[(]",""),
+          Program = str_extract(`College(Program)`,"[(](.*)[^)]"),
+          Program = str_replace(Program,"[()]",""))
+
+#number of us college/non-us college offering such degrees
+table_ds2 %>% distinct(College,`State(if USA)`) %>%
+  mutate(in_us = ifelse(`State(if USA)` == "","Not in the U.S.", "In the U.S.")) %>%
+  group_by(in_us) %>% summarise(n_total = n())
+```
+
+### Problem 2
+The web site [Box Office Mojo](http://www.boxofficemojo.com) gives statistics on box office earnings of movies. In addition to daily earnings, the web site also maintains lists of yearly and all time record holders.
+
+
+We will start with a look at the movies in the top 100 of all time movie worldwide grosses in box office receipts. In particular, we will scrape the data from [Box Office Mojo: All Time Box Office](http://www.boxofficemojo.com/alltime/world/?pagenum=1&p=.htm). The dollar amounts are in millions of dollars and the years marked with "^" indicate that the movie had multiple releases.
+
+a. Read in the data from page 1 using the `read_html` command. How many HTML tables are on the page? Which table contains the box office earnings? 
+
+**answer:** There are three html tables on the page, and Table 3 contains box office earnings.
+```{r 2a}
+url_boxoffice <- "http://www.boxofficemojo.com/alltime/world/?pagenum=1&p=.htm"
+boxoffice.html <- read_html(url_boxoffice)
+tablesbo.html <- html_nodes(boxoffice.html,"table") #3 tables
+table_bo <- html_table(tablesbo.html[[3]])
+```
+
+b. Use `html_table` command with `header=TRUE` to create a data frame from the HTML table of top 100 movies. Clean up variable names by renaming columns 5-9 to be: "DomesticDollars", "DomesticPercentage", "OverseasDollars", "OverseasPercentage", "Year". 
+
+**answer:**
+```{r 2b}
+table_bo2 <- html_table(tablesbo.html[[3]],header = TRUE)
+colnames(table_bo2)[5] <- "DomesticDollars"
+colnames(table_bo2)[7] <- "OverseasDollars"
+table_bo2 <- table_bo2 %>% 
+  rename(DomesticPercentage = `Domestic / %`, OverseasPercentage = `Overseas / %`,
+         Year = `Year^`)
+colnames(table_bo2)
+```
+
+c. For most numeric columns, we see that the numbers are either prefaced by a dollar sign or end with a percentage, both of which will need to be removed. We will also have to remove the commas. Clean up the four columns with these issues and change their type to numeric (dbl) rather than character. 
+
+**answer:**
+```{r 2c}
+# clean column 4 to column 9, and the type from column 4 to column 8
+table_bo22 <- table_bo2 %>% 
+  mutate(Worldwide = str_extract(str_replace(Worldwide,",",""),"[^$^][\\d]*[.]*[\\d]*[^%^]")) %>%
+  mutate(DomesticDollars = str_extract(str_replace(DomesticDollars,",",""),"[^$^][\\d]*[.]*[\\d]*[^%^]")) %>%
+  mutate(DomesticPercentage = str_extract(str_replace(DomesticPercentage,",",""),"[^$^][\\d]*[.]*[\\d]*[^%^]")) %>%
+  mutate(OverseasDollars = str_extract(str_replace(OverseasDollars,",",""),"[^$^][\\d]*[.]*[\\d]*[^%^]")) %>%
+  mutate(OverseasPercentage = str_extract(str_replace(OverseasPercentage,",",""),"[^$^][\\d]*[.]*[\\d]*[^%^]")) %>%
+  mutate(Year = str_extract(str_replace(Year,",",""),"[^$^][\\d]*[.]*[\\d]*[^%^]")) %>%
+  mutate_at(c(4:8),funs(as.numeric)) %>% glimpse()
+```
+
+d. Using the anchor tag `a`, pull the anchor tags from the Html table of box office earnings that you found in part a (before turning it into a data frame table). Then get the url link (`href`) for the movie Titanic. (Note: the link is a page on `http://www.boxofficemojo.com`)
+
+**answer:**
+```{r 2d}
+links_table <- html_nodes(tablesbo.html[[3]], "a") #Pull anchor tags
+vec <- html_attr(links_table,"href")
+vec[grep("[t][i][t][a][n][i][c]",vec)] # the url for titanic
+```
+
+e. The website contains 7 pages of the "top 661" grossing movies. The basic format for their url links is shown in `tempUrl` where `#` is just a placeholder for a page number (1 up to 7). Fill in a page number in the `#` spot and verify that the url works. 
+
+**answer:**
+```{r 2e1}
+tempUrl <- "http://www.boxofficemojo.com/alltime/world/?pagenum=#&p=.htm"
+pg5 <- "http://www.boxofficemojo.com/alltime/world/?pagenum=5&p=.htm"
+boxoffice.html5 <- read_html(pg5)
+tablesbo.html5 <- html_nodes(boxoffice.html5,"table") #3 tables
+table_bo5 <- html_table(tablesbo.html5[[3]],header = TRUE)
+# After checking with the original page and table_bo5, the url indeed works
+```
+
+Write a function that takes in this `tempUrl` and a page number (1 through 7) and returns a data frame of box office stats (like the data frame you created in part b). Then use apply and binding functions to create one data frame of all 661 movies. Do not use a `for` loop for this question! (Hint: you will likely need to use a function from `stringr` to generate the actual url addresses to plug into `read_html`.)
+
+**answer:**
+```{r 2e2}
+my_fun <- function(tempUrl,pgNum){
+  url <- str_replace(tempUrl,"pagenum=#",paste0("pagenum=",pgNum))
+  html <- read_html(url)
+  tablesbo.html <- html_nodes(html,"table") #3 tables
+  table_bo <- html_table(tablesbo.html[[3]],header = TRUE)
+}
+
+pgS <- c(1:7)
+list <- lapply(
+  pgS, FUN = my_fun, tempUrl = "http://www.boxofficemojo.com/alltime/world/?pagenum=#&p=.htm")
+df_all <- list %>% bind_rows() #the desired data frame
+dim(df_all)
+```
+
+### Problem 3
+Consider the `NHANES` data (from the same-named package) used in chapter 8. See the help file for this data for more info. 
+
+Now suppose you are working for Target as a data scientist and you are tasked with predicting which customers are pregnant based mainly on demographic and physical patterns observed in the publically available NHANES data. (A real data scientist for Target would also have buying profiles!) For this problem you want to predict `PregnantNow` using the characteristics: `Age`, `Education`, `HHIncomeMid`,  `MaritalStatus`, `Bmi`, and `Height`.
+```{r,include=FALSE}
+library(NHANES)
+glimpse(NHANES)
+```
+
+a.  Recode `PregnantNow` to have two levels (yes, no) and make the `unknown` level NAs. (If you used `recode_factor` see its help file for figuring out how to change `unknown` to NAs). Then recode `MaritalStatus` to just be `married` or `notmarried`. Finally, create a subset of the data for females that only contains complete cases (i.e. no NAs) for the variables described above that you will use in this problem (after selecting your variables you can then use `na.omit` function).
+
+**answer:**
+```{r 3a}
+#recode preganatNow
+NHANES_df <- NHANES
+levels(NHANES_df$PregnantNow)
+NHANES_df$PregnantNow[NHANES_df$PregnantNow == "Unknown"] <- NA
+NHANES_df$PregnantNow <- as.character(NHANES_df$PregnantNow)
+NHANES_df$PregnantNow <- as.factor(NHANES_df$PregnantNow)
+levels(NHANES_df$PregnantNow)
+
+#recode MaritalStatus
+levels(NHANES_df$MaritalStatus)
+levels(NHANES_df$MaritalStatus) <- c("notmarried", "notmarried", "married","notmarried","notmarried","notmarried")
+levels(NHANES_df$MaritalStatus)
+
+subset_woman <- NHANES_df %>% 
+  distinct() %>% #eliminate absolutely duplicated info
+  filter(Gender == "female") %>%
+  select(ID,Age,Education,HHIncomeMid,MaritalStatus,BMI,Height,PregnantNow) %>%
+  na.omit()
+```
+
+b. Using your data from part a, fit a logistic model to model pregnancies using the set of specificied explanatory variables. Then use a threshold of 0.5 to predict pregnancies. Compute the confusion matrix, accuracy, sensitivity and specificity. 
+
+**answer:** 
+
+The model predicts everyone not preganat. The confusion matrix is printed below. The accuracy is 95.87%. The sensitivity (predicting pregnant as pregnant) is 0 and the specificity (predicting not pregnant as not pregnant) is 1.
+```{r 3b}
+#success: pregnant; failure: not pregnant
+pregnant.glm1 <- glm(PregnantNow ~ Age + Education + HHIncomeMid + MaritalStatus + BMI + Height, 
+                    family="binomial", data=subset_woman)
+subset_woman <- subset_woman %>%
+  mutate(probs1 = predict(pregnant.glm1, type="response"), 
+         pred1 = ifelse(probs1 >= .5, "PregnantNow", "NotPreganatNow") ) 
+
+#confusion matrix, accuracy, sensitivity and specificity
+(conf.mat1 <- table(subset_woman$PregnantNow, subset_woman$pred1))
+sum(diag(prop.table(conf.mat1))) # accuracy
+prop.table(conf.mat1,1)[1,1] # specificity 
+# sensitivity 0 in this case
+```
+
+c. Draw the ROC curve and double density curves for your model. Describe what these graphs tell us about our model.
+
+**answer:**
+Overall,From the Double Density Graph, we find that our model is good at correctly predicting non-pregnant (failure), but does not do well in predicting pregnant (success). From the ROC curve, we notice that our model is better than random guess (above the y=x line), but still far from perfect because we have to sacrifice a lot of sensitivity to achieve high specificity. In fact, this is somehow reflected by the previous part as we set threshold as 0.5, where the sensitivity is 0, while the specificity is 1.
+
+```{r 3c, echo = FALSE}
+library(ROCR)
+
+#Double Density graph
+subset_woman %>%
+  ggplot(aes(x=probs1, color=PregnantNow)) + 
+  geom_density() + ggtitle("Forecasted pregnant probabilities") + 
+  xlab("Probability of preganacy (forcasted)")
+
+#ROC Curve
+preds_obj <- prediction(subset_woman$probs1, ifelse(subset_woman$PregnantNow == "Yes",1,0))
+perf_obj <- performance(preds_obj, "tpr","fpr")
+plot(perf_obj) + title("ROC Curve for predicting pregnance for Model 1")
+```
+
+d. Repeat part b using a threshold of 0.05. Which threshold would you use (0.5 or 0.05) if your job depended on you correctly identifying woman who were pregnant at a high rate? Which threshold would you use if your bosses wanted a low chance of missclassifying a woman who was *not* pregnant?
+
+**answer:**
+
+If my job is to correctly identifying woman who were pregnant at a high rate, I will use threshold of 0.05 because it has a higher sensitivity (predicting pregnant as pregnant) of 73% than 0% of threshold 0.5. On the other hand, if my bosses wanted a low chance of missclassying a woman pregnant when she was not, I will use the threshold of 0.5 because it has a specificity of 1, which means 0 chance of such missclassification, while the threshold of 0.05 only has a specificity of 0.53.
+
+```{r 3d}
+subset_woman <- subset_woman %>%
+  mutate(pred2 = ifelse(probs1 >= .05, "PregnantNow", "NotPreganatNow") ) 
+
+#confusion matrix, accuracy, sensitivity and specificity
+(conf.mat2 <- table(subset_woman$PregnantNow, subset_woman$pred2))
+sum(diag(prop.table(conf.mat2))) # accuracy
+prop.table(conf.mat2,1)[1,1] # sensitivity 
+prop.table(conf.mat2,1)[2,2] # specificity
+```
+
+e. The overall rate of pregnancies in your data constructed in part a should be around 5%. Barb, the lazy data scientist, decided simply to classify woman as "pregnant" based on this 5% rate (since, hey, it will result in about 5% of her predictions being pregnant which matchs the rate in the data!). Compute the confusion matrix, accuracy, sensitivity and specificity. Make sure to explain/show your work for these calculations.
+
+**answer:** 
+
+We use a random number generator to generate 56 unique integers out of 1:1137, where 1137 is the number of rows of the dataset. We assign the woman with these 56 row numbers as predicted pregnant. Ultimately, we come up with a model with 91.3% accuracy, 95.0% sensitivity and 4.3% specificity. 
+
+```{r 3e}
+1137*0.05 #Let'try randomly assigning 56 women pregnant
+set.seed(155)
+samp <- ceiling(runif(56, 1, nrow(subset_woman)))
+length(unique(samp)) #assign those rows as pregnant
+
+subset_woman <- subset_woman %>%
+  mutate(pred3 = ifelse(row_number() %in% samp, "PregnantNow_sim","NotPreganatNow_sim"))
+
+#confusion matrix, accuracy, sensitivity and specificity
+(conf.mat3 <- table(subset_woman$PregnantNow, subset_woman$pred3))
+sum(diag(prop.table(conf.mat3))) # accuracy
+prop.table(conf.mat3,1)[1,1] # sensitivity 
+prop.table(conf.mat3,1)[2,2] # specificity
+```
+
+### Problem 4
+Consider the model you fit in problem 3. 
+
+a. Refit your model in part a of problem 3 using the 2009-10 `SurveyYr` as the training data set and the 2011-12 year as the test set. Using a 0.05 theshold, compute the accuracy, sensitivity and specificity of the predictions from both the training and test sets.
+
+**answer:** 
+
+For testing set, the accuracy is 66.6%, the sensitivity is 65%, and the specificity is 66.6%. For training set, the accuracy is 64.1%, the sensitivity is 66.7%, and the specificity is 64.0%.
+```{r 4a,echo=FALSE}
+subset_woman2 <- NHANES_df %>% 
+  distinct() %>% #eliminate absolutely duplicated info
+  filter(Gender == "female") %>%
+  select(ID,SurveyYr,Age,Education,HHIncomeMid,MaritalStatus,BMI,Height,PregnantNow) %>%
+  na.omit()
+
+#get the training set and testing set
+woman2_training <- subset_woman2 %>% filter(SurveyYr == "2009_10")
+woman2_testing <- anti_join(subset_woman2,woman2_training)
+
+#for training set
+#success: pregnant; failure: not pregnant
+pregnant.glm2 <- glm(PregnantNow ~ Age + Education + HHIncomeMid + MaritalStatus + BMI + Height, 
+                    family="binomial", data=woman2_training)
+
+#training
+probs_woman_train <- woman2_training %>%
+  transmute(probs = predict(pregnant.glm2, type="response"),
+         dataType="train",
+         pregnantNow = PregnantNow) %>% print()
+
+#testing
+probs_woman_test <- woman2_testing %>%
+  transmute(probs = predict(pregnant.glm2, newdata=woman2_testing, type="response"),
+         dataType="test",
+         pregnantNow = PregnantNow) %>% print()
+
+#bind
+preg_results <- bind_rows(probs_woman_train, probs_woman_test)
+preg_results <- preg_results %>% 
+  mutate(preds = ifelse(probs >= .05, "Yes", "No")) %>% print()
+
+#confusion matrix
+(conf.mats <- table(preg_results$pregnantNow, preg_results$preds, 
+                    preg_results$dataType))
+
+#calculate the rates:
+rates_preg <- preg_results %>% group_by(dataType) %>%
+  summarize(N=n(),
+            accuracy = sum(pregnantNow == preds)/N, 
+            N_preg = sum(pregnantNow == "Yes"),
+            true_preg = sum(pregnantNow == preds & pregnantNow == "Yes"), 
+            true_nopreg = sum(pregnantNow == preds & pregnantNow == "No"), 
+            sensitivity = true_preg/N_preg, 
+            specificity = true_nopreg/(N-N_preg)
+            ) %>%
+  select(- N_preg, - true_preg, - true_nopreg)
+
+rates_preg
+```
+
+b. Draw ROC curves for both the training and test sets. Compare the curves and comment on how well your 2009-10 model can predict 2011-12 pregnancies. 
+
+**answer:**
+
+From the ROC plot below, we notice that the two ROC curves are pretty close and well above the random guess line and the two points are pretty close to each other, which means that the 2009-10 model predicts well with the 2011-12 pregnancies.
+```{r 4b, echo=FALSE}
+#for ROC Curve plots
+roc_fn <- function(data)
+{ y.bin <- ifelse(data$pregnantNow == "Yes",1,0)
+  preds_obj <- prediction(data$probs, y.bin)
+  perf_obj <- performance(preds_obj, "tpr","fpr")
+  perf_df <- data_frame(fpr=unlist(perf_obj@x.values), tpr= unlist(perf_obj@y.values), 
+                        threshold=unlist(perf_obj@alpha.values))
+  return(perf_df)
+}
+
+perf_df <- preg_results %>%
+  group_by(dataType) %>%
+  do(roc_fn(.))
+
+#plotting
+ggplot(perf_df, aes(x=fpr, y=tpr)) +  geom_line(aes(linetype = dataType)) + 
+  labs(x="false positive rate (1-specificity)", y="true positive rate (sensitivity)", title="ROC curve for logistic") + 
+  geom_abline(slope=1,intercept=0, linetype=3) + 
+  geom_point(data=rates_preg, aes(x=1-specificity, y=sensitivity))
+```
+
+### Problem 5
+Consider the model you fit in problem 3. 
+
+a. Use the `cv.glm` command to get the cross-validation error estimate using 5-fold CV with a threshold of 0.5. Use this error to estimate the accuracy of the model and compare this to your answer problem 4c.
+
+**answer:**
+
+The error is 0.04, where 1-0.04=0.96, which is close to the accuracy of 95.87% we got in 3b.
+
+```{r 5a}
+library(boot)
+cost <- function(y, pi) mean(abs(y-pi) >= 0.5)
+set.seed(15)
+cv.glm1 <- cv.glm(subset_woman, pregnant.glm1, cost, K=5)
+cv.glm1$delta[1]
+```
+
+b. Use the `cv.glm` command to get the cross-validation error estimate using 5-fold CV with a threshold of 0.05. Use this error to estimate the accuracy of the model and compare this to your answer problem 4d.
+
+**answer:**
+
+The error is 0.307, which is close to the accuracy of 72.7% we got in 3d.
+```{r 5b}
+cost2 <- function(y, pi) mean(abs(y-pi) >= 0.05)
+set.seed(15)
+cv.glm2 <- cv.glm(subset_woman, pregnant.glm1, cost2, K=5)
+cv.glm2$delta[1]
+```
+
+### Problem 6
+Take a look at textbook exercise 8.5. For parts (a)-(b) below, we will use the response `y_td` as our response to make a classifier for **tropical depressions**:
+
+```{r}
+library(rpart)
+library(partykit)
+table(storms$type)
+storms <- storms %>% 
+  mutate(y_td = recode_factor(type, `Tropical Depression`="Tropical Depression", .default="other"))
+storms %>% group_by(type) %>% select(type,y_td)
+levels(storms$y_td)
+storms$y_td <- relevel(storms$y_td, "other")
+levels(storms$y_td)
+```
+
+a. Create a decision tree to classify a storm as a tropical depression (or not) using `wind` and `pressure` as your predictors. Draw a tree diagram of the model and describe what wind speed and pressure characteristics can be used to identify a tropical depression. (Note: use the default control parameters for `rpart`.)
+
+**answer:**
+
+From the decision tree, we notice that the threshold 32.5 of wind speed is a characteristic to identify, where for wind has a speed of at least 32.5, no tropical depression happens. For wind speed smaller than 32.5, there is a very high chance of tropical depression if the wind speed is between 22.5 and 32.5. On the other hand, if the wind speed is smaller than 22.5, there is a decent chance of tropical depression if the pressure is smaller than 1012.5, while if the pressure is at least 1012.5, there is almost no tropical depression.
+```{r 6a}
+storm_rpart <- rpart(y_td ~ pressure + wind, data=storms)
+plot(as.party(storm_rpart))
+```
+
+b. Visualize your model in part (a) in the predictor space. Your figure should look similar to either figure 8.10 or the loan default example 1 duration/credit plot (day 20 slides/activity). (Note: use `geom_jitter` rather than `geom_point` to account for overplotting)
+
+**answer:**
+We will plot the tropical depression part in node 6 and node 7 of the previous decision tree as shaded area.
+
+```{r 6b}
+range(storms$pressure)
+range(storms$wind)
+ggplot(data = storms, aes(x = wind, y = pressure)) +
+  geom_jitter(aes(color=y_td),alpha=0.5) + 
+  geom_vline(xintercept = 32.5) + geom_vline(xintercept = 22.5) + geom_hline(yintercept = 1012.5) +
+  geom_segment(x=15,xend=32.5, y=905,yend=905, color="black") + 
+  geom_segment(x=15,xend=15, y=905,yend=1012.5, color="black") +
+  geom_segment(x=22.5,xend=32.5, y=1019,yend=1019, color="black") +
+  annotate("rect",xmin=15,xmax=22.5,ymin=905,ymax=1012.5, fill="blue", alpha=.1)+
+  annotate("rect",xmin=22.5,xmax=32.5,ymin=905,ymax=1019, fill="blue", alpha=.1) + 
+  ggtitle("Blue = predicted tropical depression region")
+```
+
+c. Create one decision tree to classify all four types of storms! Use `type` as your response and `wind` and `pressure` as your predictors. Draw a tree diagram of the model.   Is it easy to distinguish between storms using these two measures? Which measure, wind speed or pressure, seems most important when classifying storm types? (Note: use the default control parameters for `rpart`.)
+
+**answer:**
+
+It seems easy to distinguish storms based on these two measures, and the wind measure seems to be the most important when classfying storm types (given that the top two nodes are win measures and there is only one bottom node for pressure measure).
+```{r 6c}
+levels(storms$type)
+storms$type <- as.factor(storms$type)
+levels(storms$type)
+storm_rpart2 <- rpart(type ~ pressure + wind, data=storms)
+plot(as.party(storm_rpart2))
+```
+
+d. Compute the accuracy of your model. Then using language that a non-statistician/data scientist would understand, describe what accuracy measures and how you can classify these four types of storms using their wind speed and pressure characteristics.
+
+**answer:**
+
+The accuracy of our model is 85.8%. The accuracy measures that what proportion of tropical types is predicted correctly based on our model. The 85.8% means that on average for every 100 observations in our dataset, we are able to predict 86 tropical types correctly, based on the information we have for wind and pressure. We can classify these four types of storms by conditioning on wind and pressure, as suggested by tree. For instance by the bottom left part of the decision tree, if the wind speed is at least 62.5, there were a lot of observed hurricanes and the occurence of hurricane is much higher than the occurence of other three types. Thus, we have a cutoff of wind speed of 62.5, and above this threshold our model predicts hurricanes.
+```{r 6d}
+storms <- storms %>% mutate(pred_dtree = predict(storm_rpart2, type="class"))
+conf_mat6 <- table(storms$type, storms$pred_dtree)
+conf_mat6 #confusion matrix
+sum(diag(conf_mat6))/sum(conf_mat6) #accuracy
+```
+

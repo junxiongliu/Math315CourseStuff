@@ -1,0 +1,286 @@
+---
+title: "Math 315 F16: Homework 4"
+author: "Junxiong Liu"  
+date: "Due by midnight, Saturday Oct. 9 - solution will be posted Sunday so no late HW accepted."
+output: 
+  html_document:
+    fig_height: 10
+    fig_width: 15
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse=TRUE, prompt=TRUE,comment=NULL,message=FALSE, include=TRUE)
+```
+
+Place your homework assignment .Rmd and html/pdf/word docs in the hand-in folder by the given deadline. Also let me know: 
+
+```{r packages, include=FALSE}
+library(ggplot2)
+library(shiny)
+library(dplyr)
+library(tidyr)
+library(nycflights13)
+library(Lahman)
+library(readr)
+library(lubridate)
+```
+
+**Who did you work with:** I talked with Frank Yang about the understanding of Problem 1c.
+
+## No more problems will be added!
+
+### Problem 1
+More with the `nycflights13` data:
+
+a. Consider the top 10 destinations out of NYC area in 2013:
+```{r,eval=FALSE}
+top_dest <- flights %>% group_by(dest) %>% summarize(N=n()) %>% arrange(desc(N)) %>% slice(1:10)
+top_dest
+```
+Suppose we wanted to use this destination list to filter the `flights` data to only include flight info about these top ten destinations. You could use `filter` to do this (e.g. `filter(flights,dest %in% top_dest$dest))` or you could use a joining operation. Run the following two joins:
+```{r,eval=FALSE}
+semi_join(flights, top_dest,by="dest")
+left_join(flights, top_dest,by="dest")
+right_join(flights, top_dest,by="dest")
+```
+Two of these commands returns a  "top 10 destination" data frame of flights.  Explain which two commands provide this dataset, then explain the (one) key difference between the two datasets returned by each. (Note: `left_join` and `right_join` are examples of *mutating* joins while `semi_join` is an example of a *filtering* join.)
+
+*answer:*
+
+The **semi_join** and **right_join** commands both do the job because both commands return all rows of *flights* data matching the columns in *top_dest*, and thus we will have the information of top 10 destinations by both commands. A key difference is that the **semi_join** command will only keep all the columns in *flights* without including new columns, while the **right_join** command will not only keep all the columns in *flights*, but also include the column of "N" (number of flights to top destinations) from *top_dest*. 
+
+b. How many airports are given in the `airports` data? (Check the help file for it if needed.) How many airport destinations are given in the `flights` data? How many different destinations flown out of NYC are not in the  `airports` data? (Hint: try using `anti_join` for the last question.)
+
+*answer*:
+
+- There are 1396 unique faa airport codes and 1380 unique names of airports. As we will use faa airport codes as identificaiton, there are 1396 airports in the *airports* data.
+
+- There are 105 destinations given in the *flights* data
+
+- 4 destinations (BQN, SJU, STT, PSE) flying out of NYC are not in the *airports* data.
+
+```{r}
+head(airports)
+
+#number of airports
+length(unique(airports$faa))
+length(unique(airports$name))
+length(unique(airports$faa))==nrow(airports)
+
+#number of destinations in flights data
+length(unique(flights$dest))
+
+#destinations flying out of NYC not in airports data
+anti_join(flights,airports,by=c("dest"="faa")) %>% select(dest) %>% distinct()
+```
+
+c. Compute the average daily delay by destination, then join this with the `airports` data. Modify the US map below to show the spatial distribution of departure delays by destination. Does there seem to be any spatial pattern in delays by destination? (Hint: show only the NYC destination airports and add a visual cue to display mean delay time.)
+
+*answer*:
+
+I think there are two understandings of the question and I am not sure which one is right. The first understanding is as following where average daily delay depends on the number of flights flying to the destination and it is a the average of the sum of delay times for all flights in a day to a certain location.
+
+By the plot below, there does not seem to be any spatial pattern for average daily delay. The highest averages of total daily departure delays are happening for the departure to bigger airports (see the two big points in CA, where should be San Francisco and Los Angeles)
+
+```{r}
+#average daily delay by destination
+
+temp <- flights %>% group_by(year,month,day,dest) %>% summarise(total_daily_delay = sum(dep_delay,na.rm=TRUE)) %>%
+  ungroup() %>% group_by(dest) %>% summarise(avg_daily_delay = mean(total_daily_delay,na.rm=TRUE))
+joined <- inner_join(temp,airports,by=c("dest"="faa")) %>% na.omit() #all NYC destination airports
+  
+ggplot(joined, aes(x=lon, y=lat)) +
+    borders("state") +
+    geom_point(aes(size=avg_daily_delay,alpha=avg_daily_delay)) +
+    coord_quickmap() + xlab("Longtitude") + ylab("Latitude") + ggtitle("Spatital distribution of average daily departure delays by destination")
+```
+
+The second understanding is just the average delay per flight.By the plot below, it seems that the long-distance flights to the West (i.e. California) and to the far south (i.e. Florida) generally have smaller departure delay in comparison with the departure delay for shorter distance destinations around NYC. However, I would say that this pattern is not obviuos, and further investigation on this is definitely needed if we want a conclusion.
+
+```{r}
+#average daily delay by destination
+
+temp <- flights %>% group_by(dest) %>% summarise(avg_delay = mean(dep_delay,na.rm=TRUE)) 
+joined <- inner_join(temp,airports,by=c("dest"="faa")) %>% na.omit() #all NYC destination airports
+  
+ggplot(joined, aes(x=lon, y=lat)) +
+    borders("state") +
+    geom_point(aes(size=avg_delay,alpha=avg_delay)) +
+    coord_quickmap() + xlab("Longtitude") + ylab("Latitude") + ggtitle("Spatital distribution of average departure delays by destination")
+```
+
+### Problem 2
+Textbook exercise 5.1
+
+*answer:*
+
+```{r}
+head(Teams)
+Team_needed <- Teams %>% filter(teamID == "CHN") %>% select(yearID,HR,HRA) 
+Team_needed_long <-
+  gather(Team_needed,key = type,value = count,HR,HRA) 
+  #note: value entry: (new name), things to gather 1, things to gather 2
+  #key entry: new name for the "types"
+
+Team_needed_long %>% ggplot(aes(x=yearID,y=count,color=type)) + geom_point() + geom_line() +
+  xlab("Year") + ylab("Number") + ggtitle("Home runs by Cubs against year conditioned on hit (red) or allowed (blue)")
+```
+
+### Problem 3
+Read through HW's section 12.6 Case Study: [http://r4ds.had.co.nz/tidy-data.html#case-study](http://r4ds.had.co.nz/tidy-data.html#case-study), then answer the exercises (1-4) in 12.6.1.
+
+```{r}
+who_new <-
+  who %>%
+  gather(code, value, new_sp_m014:newrel_f65, na.rm = TRUE) %>% 
+  mutate(code = stringr::str_replace(code, "newrel", "new_rel")) %>%
+  separate(code, c("new", "var", "sexage")) %>% 
+  select(-new, -iso2, -iso3) %>% 
+  separate(sexage, c("sex", "age"), sep = 1)
+```
+*answer:*
+
+**1.** It is not reasonable to eliminate NAs in this way because if we do this, we are not able to identify whether a piece of data is implicitly missing (absence of presence) or explicitly missing (presence of absence). For instance, we notice that the data for Afghanistan in 1986 in the final tidy dataset is not present, but we are not sure whehter it is in the original dataset with NA (explicitly mssing) or not in the original dataset at all (implicitly missing). 
+
+Thus, we actually need to keep track of the presented NAs because there is chance of implicitly missing data, which represnet different problems about the dataset in comparison with explicitly missing data. 
+
+Finally, NA and zero are definitely different, because NA represents that we didn't record the data/we tried to record but we were not able to, while zero represent that we **knew** there were zero occurence. 
+
+**2.** If we omit this "mutate" step, we will not be able to identify and separate out the strings in the rows with "newrel", which will just make our tidy process incomplete and produce NAs in the sex and age columns.
+
+**3.** By the following code, since each pair has the same cardinality, it is safe to claim that the variables *iso2* and *iso3* repeat the variable *country*.
+
+```{r}
+c1 <- data.frame(who %>% distinct(country) %>% summarise(n()))[1,1]#count distinct country
+c2 <- data.frame(who %>% distinct(country,iso2) %>% summarise(n()))[1,1]#count distinct (country,iso2)
+c3 <- data.frame(who %>% distinct(country,iso3) %>% summarise(n()))[1,1]#count distinct (country,iso3)
+c4 <- data.frame(who %>% distinct(country,iso2,iso3) %>% summarise(n()))[1,1]#count distinct (country,iso2,iso3)
+
+c1==c2
+c2==c3
+c3==c4
+
+#All equal, so country, iso2, iso3 are repetitive
+```
+
+**4.** Below is an graph for the time trends for the number of occurences of TB in top 5 occuring coutnries (from 1995 to 2013), conditioned on sex and country:
+
+```{r}
+#top 5 countries
+top_country <- who_new %>% group_by(country) %>% 
+  summarise(n_total=sum(value)) %>% arrange(desc(n_total)) %>% filter(row_number() <= 5)
+
+#graph
+who_new %>% filter(country %in% top_country$country) %>% group_by(country,year,sex) %>% summarise(n_total=sum(value)) %>%
+  ggplot(aes(x=year,y=n_total,color=country)) + geom_point() + geom_line(aes(linetype=sex),size=1.1) +
+  xlab("Year") + ylab("Count") + ggtitle("Total number of Tuberculosis (top 5) against year conditioned on sex and coutnry")
+```
+
+### Problem 4
+Revist the problem 12 plot that is shown in the day 11 Energy Activity solution (on moodle). 
+
+a. Recreate this plot for Laird Hall. Describe the trends observed for both mean usage and SD of usage. 
+b. Find the day with a large spike in SD in November 2015. Explore the data for this day to explain why the SD is so large. 
+c. Martha Larson says that the Laird energy meter was adjusted in April 2016. Use the drop in daily usage to determine what day in April this adjustment occurred. 
+d. Martha says the higher readings in Laird are due to an incorrect meter that was reading too high. To correct these "too high" readings, we need to multiply by a factor of 0.16. Do this to get "corrected" average and SD daily readings (for this time period), then replot the graph from part a. Does this correction to the pre-April correction readings seem to bring the "too high" readings back in line with the post-April correction readings? 
+
+```{r}
+energy <- read_csv("http://people.carleton.edu/~kstclair/data/EnergyData1516.csv", col_types = cols(Timestamp = col_datetime(), dayWeek = col_factor(levels=c("Mon","Tues","Wed","Thurs","Fri","Sat","Sun")) , .default = col_double()))
+energy_narrow <- energy %>% gather(key=building, value= energyKWH, `100_Nevada_Street`:Wilson_House)
+```
+
+*answer:*
+
+**a:** Overall, higher KWH mean and sd are observed during the period of September to April (mostly academic year) than the period of April to August (mostly summer). The mean and sd are both Spiking as time goes (probably due to big difference in usage between weekdays and weekends). The range of spike (from a local maximum to a local minimum) for both mean and sd from September to April is larger than the range of spike from April to August. Also, in the middle of April, we observe a significant drop in both mean and sd for KWH.
+
+```{r}
+Laird <- energy_narrow %>%
+  filter(building == "Laird_Hall") %>%
+  group_by(year,month,dayOfMonth) %>%
+  summarize(N=sum(!is.na(energyKWH)), Mean = mean(energyKWH,na.rm=TRUE), SD =  sd(energyKWH,na.rm=TRUE)) %>%
+  mutate(monthName = month(month, label=TRUE)) %>%
+  print(width=Inf)
+Laird_narrow <- Laird %>%
+  gather(key="Statistic",value="KWH",Mean, SD) %>%
+  print(width=Inf)
+Laird_narrow %>%
+  ggplot(aes(x=rep(1:366,2), y=KWH, color=monthName)) + 
+  geom_line(aes(linetype=Statistic),size=1.1) + 
+  scale_color_brewer(palette="Paired") + 
+  labs(title="Laird (Sept 2015 - Aug 2016)",x="day",y="average daily KWH")  
+```
+
+**b:** The day with large spike in SD in November for Laird Hall is **Nov.17**. The reason why There is such a big spike is because at 10:15 a.m., the energy soared to 250 KWH, while the second highest recorded in the day is only 46 KWH and the average of the day is only around 30 KWH.
+
+```{r}
+#There is a large spike in sd around Nov.15!
+Laird_narrow %>% filter(month==11) %>%
+  ggplot(aes(x=dayOfMonth, y=KWH)) + 
+  geom_line(aes(linetype=Statistic),size=1.1) + 
+  scale_color_brewer(palette="Paired") + 
+  labs(title="Laird (Nov 2015)",x="day",y="average daily KWH") 
+
+Laird_narrow %>% filter(month==11,Statistic=="SD") %>% arrange(desc(KWH)) %>% print(n=3) #day 17
+
+#investigate what happened on Nov.17
+energy_narrow %>% 
+  filter(building == "Laird_Hall",month == 11,dayOfMonth == 17) %>% 
+  arrange(desc(energyKWH)) %>% select(Timestamp,year,month,dayOfMonth,energyKWH) %>% print(n=5)
+```
+
+**c:** **April.12** has an unusually high drop from the previous day in drop of mean KWH. Thus, it must be April.12 when this adjustment occurred, and the specific time for the start of adjustment is 7 a.m.
+
+```{r}
+#using lag command to find the date with spike
+Laird_narrow %>% filter(month==4,year==2016,Statistic=="Mean") %>% arrange(dayOfMonth) %>%
+  mutate(prevday_KWH = lag(KWH, default=first(KWH)), abs_diff = abs(KWH - prevday_KWH )) %>% arrange(desc(abs_diff)) #Apr.12
+
+#finding specific time for this adjustment to happen
+energy_narrow %>% filter(building=="Laird_Hall",month==4,year==2016,dayOfMonth==12) %>%
+  mutate(prevpt_KWH = lag(energyKWH, default=first(energyKWH)), abs_diff = abs(energyKWH - prevpt_KWH ))%>%   arrange(desc(abs_diff)) #it happens at 7am
+```
+
+**d.** The correction is done, and the new plot is below. It seems that the too high usage before the correction are adjusted by multiplying this factor of 0.16!:)
+
+```{r}
+#Now we adjust all days before Apr.12 by multiplying a factor of 0.16 based on energy datafile.
+
+all_Laird <- energy_narrow %>%
+  filter(building == "Laird_Hall")
+#things going to be adjusted
+temp1 <- energy_narrow %>%
+  filter(building == "Laird_Hall",month %in% c(1,2,3,4,9:12))
+temp2 <- temp1 %>%
+  filter(year== 2016 & month ==4 & dayOfMonth >= 12)
+temp3 <- anti_join(temp1,temp2) %>% arrange(year,month,dayOfMonth,timeHour,timeMinute) # still need to adjust April 12 before 7
+temp4 <- energy_narrow %>% 
+  filter(building == "Laird_Hall",year==2016, month == 4, dayOfMonth == 12, timeHour < 7)
+
+#finally all data needs to be adjusted is here:
+need_adjusted <- merge(temp3,temp4,all=TRUE)
+
+#adjust
+Laird2_p1 <- need_adjusted %>% arrange(year,month,dayOfMonth,timeHour,timeMinute) %>% mutate(energyKWH = energyKWH * 0.16)
+  
+#no need adjust
+Laird2_p2 <- anti_join(all_Laird,need_adjusted) %>% arrange(year,month,dayOfMonth,timeHour,timeMinute)
+
+energy_narrow_Laird2 <- merge(Laird2_p1,Laird2_p2,all=TRUE)
+  
+Laird2 <- energy_narrow_Laird2 %>%
+  group_by(year,month,dayOfMonth) %>%
+  summarize(N=sum(!is.na(energyKWH)), Mean = mean(energyKWH,na.rm=TRUE), SD =  sd(energyKWH,na.rm=TRUE)) %>%
+  mutate(monthName = month(month, label=TRUE)) %>%
+  print(width=Inf)
+Laird2_narrow <- Laird2 %>%
+  gather(key="Statistic",value="KWH",Mean, SD) %>%
+  print(width=Inf)
+Laird2_narrow %>%
+  ggplot(aes(x=rep(1:366,2), y=KWH, color=monthName)) + 
+  geom_line(aes(linetype=Statistic),size=1.1) + 
+  scale_color_brewer(palette="Paired") + 
+  labs(title="Laird adjusted (Sept 2015 - Aug 2016)",x="day",y="average daily KWH") 
+
+
+```
